@@ -8,9 +8,10 @@
 
 Built for HDMI USB capture cards and webcams, it provides a fast and direct way to inspect video output from game consoles, SBCs, embedded systems, DSLR cameras, and other streaming devices — without the complexity of full recording suites like OBS.
 
+![Gameplay screen](imgs/vdisplay_game.jpg)
 ---
 
-## Why VDisPlay?
+## 🙋 Why VDisPlay?
 
 Most capture software is designed for recording or streaming.
 
@@ -26,7 +27,7 @@ Its focus is speed, simplicity, and minimal system overhead.
 
 ---
 
-## Core Features
+## ⚡ Core Features
 
 * **Sub-100ms end-to-end latency**
 * **Minimal fullscreen preview interface**
@@ -42,7 +43,7 @@ Its focus is speed, simplicity, and minimal system overhead.
 
 ---
 
-## Typical Use Cases
+## 🖱️ Typical Use Cases
 
 VDisPlay is especially useful for:
 
@@ -55,35 +56,35 @@ VDisPlay is especially useful for:
 
 ---
 
-## Architecture
+## 🛠 Architecture
 
 VDisPlay uses a hybrid architecture optimized for low latency.
 
-### Frontend (Flutter)
+### 🎨 Frontend (Flutter)
 
 The UI layer is built in Flutter and uses native external textures to render video directly on the GPU.
 
 This avoids expensive memory copies and reduces pressure on Dart's garbage collector.
 
-### Native Backend (C)
+### ⚙️ Native Backend (C)
 
 The native kernel handles all critical I/O:
 
-#### Video — Media Foundation
+#### 🖥️ Video — Media Foundation
 
 * Direct capture through `IMFSourceReader`
 * Native frame negotiation
 * Hardware-side color format negotiation (BGRA→RGBA, optimized 32-bit swap)
 * Thread-safe frame delivery via critical sections
 
-#### Audio — WASAPI
+#### 🔊 Audio — WASAPI
 
 * Low-latency shared-mode monitoring (MTA threading)
 * RAW mode support (bypasses Windows DSP)
 * Branchless VU metering via function pointer dispatch
 * Float-precision linear resampling
 
-#### MS2109 Stereo Fix
+#### 🔧 MS2109 Stereo Fix
 
 Some low-cost capture devices expose stereo audio incorrectly as:
 
@@ -97,7 +98,7 @@ in real time.
 
 ---
 
-## Keyboard Shortcuts
+## ⌨️ Keyboard Shortcuts
 
 | Key         | Action                        |
 | ----------- | ----------------------------- |
@@ -115,9 +116,9 @@ in real time.
 
 ---
 
-## Build
+## 🚀 Build
 
-### Requirements
+### 📋 Requirements
 
 * Windows 10/11 (x64)
 * Flutter SDK (desktop enabled)
@@ -157,20 +158,6 @@ windows/runner/         → native texture bridge
 build.bat
 CMakeLists.txt
 ```
-
----
-
-## Roadmap
-
-Planned:
-
-* Device hotplug detection
-* Frame timing diagnostics
-* Signal loss detection
-* Color space analysis
-* Input latency benchmarking
-* Portable builds
-* Linux support (experimental)
 
 ---
 

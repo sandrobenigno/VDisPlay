@@ -115,12 +115,36 @@ class AudioManager extends ChangeNotifier {
   /// Tries to automatically pair an audio device whose name overlaps with
   /// [cameraName]. Returns the matched device name and whether it is MONO.
   /// Returns `(audioName: null, isMono: false)` if no match is found.
+  ///
+  /// Strategy:
+  /// 1. If there was a previously selected audio device, try to reconnect it
+  ///    by ID (exact match — works when returning to a previously paired cam).
+  /// 2. If step 1 fails or there was no previous device, fall back to
+  ///    name-based matching against [cameraName].
   Future<AutoMatchResult> tryAutoMatch(String cameraName) async {
+    // Bug #2 fix: preserve the current ID before stopping so we can
+    // attempt to reconnect by the same device instead of re-matching by name.
+    final previousId = _selectedDeviceId;
+
     await stopCapture();
 
     if (!NativeBindings.isReady) return (audioName: null, isMono: false);
 
     final count = NativeBindings.enumAudioDevices();
+
+    // --- Step 1: reconnect by previous ID (exact match) ---
+    if (previousId != null) {
+      for (int i = 0; i < count; i++) {
+        if (NativeBindings.getAudioDeviceId(i) == previousId) {
+          final name = NativeBindings.getAudioDeviceName(i);
+          final channels = await startCapture(previousId, _isLoopbackEnabled);
+          return (audioName: name, isMono: channels == 1);
+        }
+      }
+      // Previous device disappeared (unplugged etc.) — fall through to name match.
+    }
+
+    // --- Step 2: name-based auto-match (fallback for first-time pairing) ---
     final cleanCamName = cameraName.toLowerCase();
 
     String? matchedId;

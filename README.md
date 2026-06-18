@@ -1,85 +1,188 @@
-# VDisPlay - Monitor de Captura & Preview Minimalista
+# VDisPlay 📺🔊
 
-O **VDisPlay** é um programa de visualização e monitoramento de vídeo e áudio em tempo real com baixíssima latência (<100ms) estilo "janela de preview do OBS", projetado com um visual elegante e tema escuro.
+[![Platform](https://img.shields.io/badge/platform-Windows-blue.svg)](#)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
+[![Stack](https://img.shields.io/badge/stack-Flutter%20%7C%20C%20%7C%20FFI-orange.svg)](#)
 
-Ele é ideal para desenvolvedores, técnicos e gamers que utilizam placas de captura HDMI USB ou Webcams para depurar a saída de consoles de videogame, placas embarcadas (SBCs/SOCs como Raspberry Pi), saídas de câmeras reflex e outros dispositivos de streaming de forma simples, direta e leve.
+**VDisPlay** is a lightweight real-time video and audio monitor with **sub-100ms latency**, designed for developers, technicians, and gamers.
 
----
-
-## 🛠️ Arquitetura e Tecnologias
-
-A aplicação é dividida em duas camadas de alta performance:
-1. **Frontend (UI em Flutter/Dart)**: Uma interface minimalista que exibe o vídeo usando **Texturas Externas Nativas (Pixel Buffer)**, proporcionando rendering acelerado via GPU sem pressão sobre o Dart Garbage Collector (GC).
-2. **Backend/Kernel (C Nativo)**: Captura de quadros em segundo plano usando **Media Foundation (Source Reader)** com conversão de cor automática para RGB32 (BGRA) no chip de vídeo, e processamento/loopback de áudio de latência mínima usando **WASAPI** com resampling linear integrado.
+Built for HDMI USB capture cards and webcams, it provides a fast and direct way to inspect video output from game consoles, SBCs, embedded systems, DSLR cameras, and other streaming devices — without the complexity of full recording suites like OBS.
 
 ---
 
-## ⌨️ Atalhos de Teclado (Controles)
+## Why VDisPlay?
 
-Como o layout é 100% minimalista (apenas o vídeo ocupando a janela), todo o controle é feito via teclado:
+Most capture software is designed for recording or streaming.
 
-| Tecla | Ação |
-|---|---|
-| **`M`** | Abre / fecha o menu de configurações (overlay semitransparente de seleção de dispositivos). |
-| **`H`** | Abre / fecha o painel de **Ajuda** com créditos do app e resumo de todos os atalhos. |
-| **`R`** | Abre / fecha o menu de **Resolução e FPS** para ajustar o formato de vídeo da captura. |
-| **`1` a `9`** | Alterna rapidamente para os primeiros 9 canais de vídeo detectados pelo sistema. |
-| **`S`** | Tira uma captura de tela (Screenshot) em PNG do frame atual e salva no diretório de execução. |
-| **`T`** | Alterna o modo **Sempre no Topo** (Always on Top) da janela. |
-| **`+`** / **`-`** | Ajusta o brilho da imagem (offset do buffer nativo, de -100% a +100%). |
-| **`F12`** | Liga / desliga o monitoramento do áudio nos alto-falantes (Loopback). |
-| **`F`** / **`F11`** | Alterna entre modo Janela e Tela Cheia (Fullscreen). |
-| **`ESC`** | Fecha qualquer menu/overlay ativo (Dispositivos, Ajuda ou Resolução) ou sai do modo Tela Cheia. |
+VDisPlay was built for a different purpose:
 
-### 🎛️ Menu de Resolução e FPS (Tecla R)
-O menu de Resolução e FPS permite ajustar o formato de vídeo dinamicamente durante a captura, sem salvar preferências (o app sempre inicia com a detecção automática do melhor formato nativo disponível):
-- **Resolução**: Lista todas as resoluções únicas suportadas pela placa de captura, ordenadas da maior para a menor.
-- **FPS**: Oferece três opções — **Nativo** (máximo suportado), **30 FPS** e **60 FPS**. Opções incompatíveis com a resolução ativa são exibidas como indisponíveis.
+* **Debugging video output**
+* **Monitoring hardware behavior in real time**
+* **Testing embedded systems**
+* **Inspecting console boot sequences**
+* **Low-overhead HDMI preview**
+
+Its focus is speed, simplicity, and minimal system overhead.
 
 ---
 
-## 🚀 Como Compilar e Executar
+## Core Features
 
-### Pré-requisitos
-* **Windows 10 ou 11** (arquitetura x64).
-* **Flutter SDK** (com suporte a desktop habilitado).
-* **Visual Studio 2022** (com a carga de trabalho de desenvolvimento para C++ Desktop habilitada) e **CMake** instalados.
+* **Sub-100ms end-to-end latency**
+* **Minimal fullscreen preview interface**
+* **Real-time audio monitoring**
+* **Dynamic resolution/FPS switching**
+* **Native GPU-accelerated rendering**
+* **Always-on-top mode**
+* **Instant screenshots**
+* **Stereo reconstruction fix for low-cost MS2109 capture cards**
+* **Brightness adjustment in real time**
+* **Safe startup mode for unstable capture devices**
+* **Bilingual interface (English / Português)**
 
-### Compilação Rápida
-Basta executar o script em lote na raiz do projeto:
-```cmd
+---
+
+## Typical Use Cases
+
+VDisPlay is especially useful for:
+
+* Debugging HDMI output from FPGA and embedded systems
+* Monitoring SBC boot output (Raspberry Pi, Orange Pi, etc.)
+* Inspecting retro console output
+* Previewing DSLR or HDMI camera feeds
+* Testing capture devices
+* Monitoring external devices without streaming overhead
+
+---
+
+## Architecture
+
+VDisPlay uses a hybrid architecture optimized for low latency.
+
+### Frontend (Flutter)
+
+The UI layer is built in Flutter and uses native external textures to render video directly on the GPU.
+
+This avoids expensive memory copies and reduces pressure on Dart's garbage collector.
+
+### Native Backend (C)
+
+The native kernel handles all critical I/O:
+
+#### Video — Media Foundation
+
+* Direct capture through `IMFSourceReader`
+* Native frame negotiation
+* Hardware-side color format negotiation (BGRA→RGBA, optimized 32-bit swap)
+* Thread-safe frame delivery via critical sections
+
+#### Audio — WASAPI
+
+* Low-latency shared-mode monitoring (MTA threading)
+* RAW mode support (bypasses Windows DSP)
+* Branchless VU metering via function pointer dispatch
+* Float-precision linear resampling
+
+#### MS2109 Stereo Fix
+
+Some low-cost capture devices expose stereo audio incorrectly as:
+
+`96kHz mono`
+
+VDisPlay can reconstruct:
+
+`48kHz stereo (L/R)`
+
+in real time.
+
+---
+
+## Keyboard Shortcuts
+
+| Key         | Action                        |
+| ----------- | ----------------------------- |
+| `M`         | Device menu                   |
+| `H`         | Help / About                  |
+| `R`         | Resolution / FPS menu         |
+| `F` / `F11` | Toggle fullscreen             |
+| `ESC`       | Close menus / exit fullscreen |
+| `T`         | Toggle always-on-top          |
+| `S`         | Capture screenshot            |
+| `+`         | Increase brightness           |
+| `-`         | Decrease brightness           |
+| `F12`       | Toggle audio monitoring       |
+| `1–9`       | Quick switch video devices    |
+
+---
+
+## Build
+
+### Requirements
+
+* Windows 10/11 (x64)
+* Flutter SDK (desktop enabled)
+* Visual Studio 2022
+* CMake
+
+### Quick Build
+
+```powershell
 .\build.bat
 ```
-O script irá:
-1. Gerar e compilar a biblioteca nativa `native_library.dll` na pasta `native/build/Release`.
-2. Executar o build do projeto Flutter Desktop em modo Release.
-3. Copiar a DLL nativa compilada automaticamente para a pasta final do executável.
 
-O executável final estará pronto em:
-`build\windows\x64\runner\Release\vdisplay.exe`
+Final executable:
 
-### Desenvolvimento (`flutter run`)
-O arquivo `windows/runner/CMakeLists.txt` foi configurado para compilar a `native_library` como parte do projeto do runner e copiar a DLL compilada automaticamente no pós-build. Sendo assim, para desenvolver basta rodar:
-```cmd
+```text
+build\windows\x64\runner\Release\vdisplay.exe
+```
+
+### Development
+
+```powershell
 flutter run
 ```
 
 ---
 
-## 📁 Estrutura do Projeto
+## Project Structure
 
-* `lib/`: Código-fonte em Dart (UI, atalhos, binds FFI e lógica de controle).
-  * `main.dart`: Tela principal, layout, orquestração dos overlays.
-  * `key_shortcuts.dart`: Mapeamento e lógica de todas as teclas de atalho.
-  * `video_preview.dart`: Gerenciador de preview e resolução/FPS em tempo real.
-  * `audio_manager.dart`: Gerenciador de captura e loopback de áudio.
-  * `native_bindings.dart`: Bindings FFI para a biblioteca nativa em C.
-  * `device_selector.dart`: Overlay do menu de dispositivos (Tecla M).
-  * `help_overlay.dart`: Overlay de ajuda com créditos e atalhos (Tecla H).
-  * `resolution_selector.dart`: Overlay de seleção de resolução e FPS (Tecla R).
-  * `window_utils.dart`: Utilitários Win32 para fullscreen e always-on-top.
-* `native/`: Código-fonte em C nativo (captura de vídeo e áudio via Media Foundation e WASAPI).
-* `windows/runner/`: Código C++ do hospedeiro Windows que faz a ponte de renderização de Textura.
-* `CMakeLists.txt`: Script CMake raiz da biblioteca nativa.
-* `build.bat`: Script automatizador de build.
-* `config.example.json`: Exemplo de arquivo de preferências locais criado pelo app.
+```text
+lib/                    → UI, overlays, FFI bindings, i18n
+native/
+  include/common.h      → shared utilities, GUIDs, device helpers
+  video_capture.c       → Media Foundation capture kernel
+  audio_capture.c       → WASAPI capture + loopback kernel
+  device_manager.c      → device enumeration + COM init
+windows/runner/         → native texture bridge
+build.bat
+CMakeLists.txt
+```
+
+---
+
+## Roadmap
+
+Planned:
+
+* Device hotplug detection
+* Frame timing diagnostics
+* Signal loss detection
+* Color space analysis
+* Input latency benchmarking
+* Portable builds
+* Linux support (experimental)
+
+---
+
+## Philosophy
+
+VDisPlay follows a simple principle:
+
+**A monitoring tool should stay out of the way.**
+
+No timelines.
+No scenes.
+No recording pipeline.
+No streaming abstractions.
+
+Just your signal — fast, direct, and visible.

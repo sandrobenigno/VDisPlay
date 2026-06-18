@@ -18,7 +18,7 @@ class VideoPreviewManager extends ChangeNotifier {
   int _brightnessOffset = 0;
   bool _isCapturing = false;
 
-  List<Map<String, String>> _videoDevices = [];
+  final List<Map<String, String>> _videoDevices = [];
 
   int? get textureId => _textureId;
   String? get selectedDeviceId => _selectedDeviceId;
@@ -178,9 +178,12 @@ class VideoPreviewManager extends ChangeNotifier {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final filepath = '$exeDir${Platform.pathSeparator}screenshot_$timestamp.png';
 
-      final filepathPtr = filepath.toNativeUtf8();
-      final success = NativeBindings.saveScreenshot(filepathPtr);
-      calloc.free(filepathPtr);
+      // Bug #1 fix: use `using` so the arena allocator handles both
+      // allocation and deallocation — avoids the malloc/calloc mismatch.
+      final success = using((arena) {
+        final filepathPtr = filepath.toNativeUtf8(allocator: arena);
+        return NativeBindings.saveScreenshot(filepathPtr);
+      });
 
       if (success == 1) {
         return filepath;

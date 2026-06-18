@@ -1,4 +1,5 @@
 #include "include/device_manager.h"
+#include "include/common.h"      // R8: wchar_to_utf8, GUIDs WASAPI compartilhados
 #include <windows.h>
 #include <mfapi.h>
 #include <mfidl.h>
@@ -7,6 +8,10 @@
 #include <stdio.h>
 
 #define MAX_DEVICES 32
+
+#ifndef MF_E_ALREADY_INITIALIZED
+#define MF_E_ALREADY_INITIALIZED ((HRESULT)0xC00D36B0)
+#endif
 
 typedef struct {
     char name[256];
@@ -21,12 +26,9 @@ static int g_audio_device_count = 0;
 
 static int g_com_initialized = 0;
 static int g_mf_initialized = 0;
+static int g_backends_initialized = 0;
 
-static void wchar_to_utf8(const WCHAR* src, char* dst, int dst_len) {
-    if (!src || !dst || dst_len <= 0) return;
-    WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, dst_len, NULL, NULL);
-    dst[dst_len - 1] = '\0';
-}
+// R8: wchar_to_utf8 removida — usar a versão inline de include/common.h
 
 extern void init_video_capture_backend();
 extern void shutdown_video_capture_backend();
@@ -34,30 +36,38 @@ extern void init_audio_capture_backend();
 extern void shutdown_audio_capture_backend();
 
 EXPORT int init_devices_backend() {
+    // Inicializa as critical sections incondicionalmente (apenas uma vez) para evitar crashes
+    // por EnterCriticalSection em funções como set_brightness_offset.
+    if (!g_backends_initialized) {
+        init_video_capture_backend();
+        init_audio_capture_backend();
+        g_backends_initialized = 1;
+    }
+
+    // CoInitializeEx no main thread (que roda o Dart) deve suportar APARTMENTTHREADED,
+    // já que o Flutter runner inicializa COM nesse modo. Também aceita RPC_E_CHANGED_MODE.
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    if (SUCCEEDED(hr)) {
-        g_com_initialized = 1;
-    } else if (hr == S_FALSE) {
-        // COM já estava inicializado nesta thread
+    if (SUCCEEDED(hr) || hr == S_FALSE || hr == RPC_E_CHANGED_MODE) {
         g_com_initialized = 1;
     }
 
     hr = MFStartup(MF_VERSION, MFSTARTUP_FULL);
-    if (SUCCEEDED(hr)) {
+    if (SUCCEEDED(hr) || hr == MF_E_ALREADY_INITIALIZED) {
         g_mf_initialized = 1;
     }
 
     if (g_com_initialized && g_mf_initialized) {
-        init_video_capture_backend();
-        init_audio_capture_backend();
         return 1;
     }
     return 0;
 }
 
 EXPORT void shutdown_devices_backend() {
-    shutdown_video_capture_backend();
-    shutdown_audio_capture_backend();
+    if (g_backends_initialized) {
+        shutdown_video_capture_backend();
+        shutdown_audio_capture_backend();
+        g_backends_initialized = 0;
+    }
 
     if (g_mf_initialized) {
         MFShutdown();
@@ -124,16 +134,14 @@ EXPORT int enum_video_devices() {
     return g_video_device_count;
 }
 
-// Definição de IID/CLSID locais para evitar problemas de vinculação WASAPI
-static const CLSID local_CLSID_MMDeviceEnumerator = {0xbcde0395, 0xe52f, 0x467c, {0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e}};
-static const IID local_IID_IMMDeviceEnumerator = {0xa95664d2, 0x9614, 0x4f35, {0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6}};
+// R8: GUIDs locais removidos — usar COMMON_CLSID_MMDeviceEnumerator / COMMON_IID_IMMDeviceEnumerator de common.h
 
 EXPORT int enum_audio_devices() {
     g_audio_device_count = 0;
     if (!g_com_initialized) return 0;
 
     IMMDeviceEnumerator* pEnumerator = NULL;
-    HRESULT hr = CoCreateInstance(&local_CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, &local_IID_IMMDeviceEnumerator, (void**)&pEnumerator);
+    HRESULT hr = CoCreateInstance(&COMMON_CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, &COMMON_IID_IMMDeviceEnumerator, (void**)&pEnumerator);
     if (FAILED(hr)) return 0;
 
     IMMDeviceCollection* pCollection = NULL;

@@ -1,0 +1,62 @@
+# Arquivos gerados pelo Flutter
+.dart_tool/
+.pub/
+build/
+*.lock
+pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+.packages
+
+# Arquivos compilados do C
+*.o
+*.obj
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.pdb
+*.exp
+*.iobj
+*.ilk
+
+native/build/
+native/cmake-build-*/
+
+# Arquivos de IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Configurações locais
+config.json
+user_preferences.json
+
+# Logs / temporários
+*.log
+*.tmp
+*~
+*.bak
+
+# Dependências Node
+node_modules/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+
+# Build do Windows Runner (extra safety)
+**/Release/
+**/Debug/
+
+# Arquivo de diretrizes iniciais
+KickStart.txt

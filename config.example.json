@@ -1,0 +1,6 @@
+{
+  "last_video_device": "\\\\?\\usb#vid_046d&pid_082d&mi_00#6&314fe8d2&0&0000#{65e871ac-243e-404f-96ff-7d0e40a34f55}\\global",
+  "last_audio_device": "{0.0.1.00000000}.{84bb2b21-4fa3-42e1-a0c5-555bb1d69d4d}",
+  "audio_loopback_enabled": false,
+  "video_brightness_offset": 0
+}

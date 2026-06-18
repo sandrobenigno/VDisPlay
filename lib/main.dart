@@ -8,18 +8,23 @@ import 'window_utils.dart';
 import 'native_bindings.dart';
 import 'help_overlay.dart';
 import 'resolution_selector.dart';
+import 'l10n.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inicializa gerenciadores nativos e carrega configurações salvas
-  final videoManager = VideoPreviewManager();
-  final audioManager = AudioManager();
-  
-  await videoManager.init();
-  await audioManager.init();
 
-  runApp(const VDisPlayApp());
+  // Initialise the native backend and load persisted preferences.
+  await VideoPreviewManager().init();
+  await AudioManager().init();
+
+  // Wrap the app in a ListenableBuilder so that the entire widget tree
+  // rebuilds when the user switches the language.
+  runApp(
+    ListenableBuilder(
+      listenable: LocaleNotifier.instance,
+      builder: (_, __) => const VDisPlayApp(),
+    ),
+  );
 }
 
 class VDisPlayApp extends StatelessWidget {
@@ -28,7 +33,7 @@ class VDisPlayApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'vdisplay',
+      title: WindowUtils.kWindowTitle,
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF0F0F0F),
@@ -49,7 +54,8 @@ class MainPreviewScreen extends StatefulWidget {
   State<MainPreviewScreen> createState() => _MainPreviewScreenState();
 }
 
-class _MainPreviewScreenState extends State<MainPreviewScreen> {
+class _MainPreviewScreenState extends State<MainPreviewScreen>
+    with WidgetsBindingObserver {
   bool _isMenuOpen = false;
   bool _isHelpOpen = false;
   bool _isResolutionOpen = false;
@@ -62,45 +68,48 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
   @override
   void initState() {
     super.initState();
-    // Adiciona ouvintes para atualizar a tela caso os gerenciadores mudem de estado
+    WidgetsBinding.instance.addObserver(this);
+
     _videoManager.addListener(_onManagerUpdate);
     _audioManager.addListener(_onManagerUpdate);
 
-    // Se não houver nenhum dispositivo de vídeo ativo ao iniciar, abre o menu automaticamente
+    // If there is no active video device on startup, open the menu automatically.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_videoManager.isCapturing) {
-        setState(() {
-          _isMenuOpen = true;
-        });
+        setState(() => _isMenuOpen = true);
       }
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _videoManager.removeListener(_onManagerUpdate);
     _audioManager.removeListener(_onManagerUpdate);
     _toastTimer?.cancel();
     super.dispose();
   }
 
-  void _onManagerUpdate() {
-    if (mounted) {
-      setState(() {});
+  /// Called by the OS when the app lifecycle changes.
+  /// On Windows, `detached` fires before the process exits, giving us a
+  /// chance to properly release native handles.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      _audioManager.stopCapture();
+      _videoManager.shutdown();
     }
+  }
+
+  void _onManagerUpdate() {
+    if (mounted) setState(() {});
   }
 
   void _showToast(String message) {
     _toastTimer?.cancel();
-    setState(() {
-      _toastMessage = message;
-    });
+    setState(() => _toastMessage = message);
     _toastTimer = Timer(const Duration(milliseconds: 1800), () {
-      if (mounted) {
-        setState(() {
-          _toastMessage = null;
-        });
-      }
+      if (mounted) setState(() => _toastMessage = null);
     });
   }
 
@@ -110,7 +119,6 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
       if (_isMenuOpen) {
         _isHelpOpen = false;
         _isResolutionOpen = false;
-        // Recarrega a lista de dispositivos ao abrir o menu
         _videoManager.refreshDevices();
       }
     });
@@ -138,17 +146,17 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hasPreview = _videoManager.isCapturing && _videoManager.textureId != null;
+    final s = LocaleNotifier.instance.s;
+    final hasPreview =
+        _videoManager.isCapturing && _videoManager.textureId != null;
     final isFullscreen = WindowUtils.isFullscreen();
 
-    // Calcula aspect ratio dinâmico
+    // Dynamic aspect ratio
     double aspectRatio = 16 / 9;
-    if (hasPreview) {
+    if (hasPreview && NativeBindings.isReady) {
       final w = NativeBindings.getVideoWidth();
       final h = NativeBindings.getVideoHeight();
-      if (w > 0 && h > 0) {
-        aspectRatio = w / h;
-      }
+      if (w > 0 && h > 0) aspectRatio = w / h;
     }
 
     return Scaffold(
@@ -161,7 +169,6 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
         isResolutionOpen: _isResolutionOpen,
         showToast: _showToast,
         child: Container(
-          // Desenha uma borda escura extremamente fina ao redor do app caso não esteja em fullscreen
           decoration: BoxDecoration(
             border: isFullscreen
                 ? null
@@ -172,7 +179,7 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
               // 1. Tela Preta / Preview de Vídeo
               Positioned.fill(
                 child: !hasPreview
-                    ? _buildEmptyState()
+                    ? _buildEmptyState(s)
                     : Center(
                         child: AspectRatio(
                           aspectRatio: aspectRatio,
@@ -181,7 +188,7 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
                       ),
               ),
 
-              // 2. Marca d'água / Indicador de Canal e Áudio no canto inferior direito (subtil)
+              // 2. Marca d'água — indicador de canal e áudio (sutil)
               if (hasPreview && !_isMenuOpen)
                 Positioned(
                   bottom: 16,
@@ -190,7 +197,8 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
                     opacity: 0.4,
                     duration: const Duration(milliseconds: 300),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(6),
@@ -211,7 +219,7 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
                             const SizedBox(width: 6),
                           ],
                           Text(
-                            _videoManager.selectedDeviceName ?? "Preview",
+                            _videoManager.selectedDeviceName ?? 'Preview',
                             style: const TextStyle(
                               color: Colors.white70,
                               fontSize: 11,
@@ -224,13 +232,14 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
                   ),
                 ),
 
-              // 3. Notificação Toast de feedback visual rápido
+              // 3. Toast de feedback rápido
               if (_toastMessage != null)
                 Positioned(
                   top: 24,
                   left: 24,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
                       color: const Color(0xEC1E1E1E),
                       borderRadius: BorderRadius.circular(8),
@@ -256,7 +265,7 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
                   ),
                 ),
 
-              // 4. Overlay de Menu semitransparente (Configurações)
+              // 4. Overlay — Configurações (Menu M)
               if (_isMenuOpen)
                 Positioned.fill(
                   child: GestureDetector(
@@ -264,7 +273,7 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
                     child: Container(
                       color: Colors.black45,
                       child: GestureDetector(
-                        onTap: () {}, // Evita fechar ao clicar dentro do menu
+                        onTap: () {},
                         child: DeviceSelectorOverlay(
                           onClose: _toggleMenu,
                           showToast: _showToast,
@@ -274,7 +283,7 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
                   ),
                 ),
 
-              // 5. Overlay de Ajuda
+              // 5. Overlay — Ajuda (Menu H)
               if (_isHelpOpen)
                 Positioned.fill(
                   child: GestureDetector(
@@ -282,16 +291,14 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
                     child: Container(
                       color: Colors.black45,
                       child: GestureDetector(
-                        onTap: () {}, // Evita fechar ao clicar dentro do menu
-                        child: HelpOverlay(
-                          onClose: _toggleHelp,
-                        ),
+                        onTap: () {},
+                        child: HelpOverlay(onClose: _toggleHelp),
                       ),
                     ),
                   ),
                 ),
 
-              // 6. Overlay de Resolução/FPS
+              // 6. Overlay — Resolução/FPS (Menu R)
               if (_isResolutionOpen)
                 Positioned.fill(
                   child: GestureDetector(
@@ -299,7 +306,7 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
                     child: Container(
                       color: Colors.black45,
                       child: GestureDetector(
-                        onTap: () {}, // Evita fechar ao clicar dentro do menu
+                        onTap: () {},
                         child: ResolutionSelectorOverlay(
                           onClose: _toggleResolution,
                           showToast: _showToast,
@@ -315,7 +322,7 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(AppStrings s) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -326,9 +333,9 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
             color: Colors.grey.withOpacity(0.4),
           ),
           const SizedBox(height: 16),
-          const Text(
-            "Nenhum dispositivo de vídeo ativo",
-            style: TextStyle(
+          Text(
+            s.noVideoActive,
+            style: const TextStyle(
               color: Colors.grey,
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -336,15 +343,16 @@ class _MainPreviewScreenState extends State<MainPreviewScreen> {
           ),
           const SizedBox(height: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.03),
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: Colors.white.withOpacity(0.05)),
             ),
-            child: const Text(
-              "Pressione [M] para abrir as configurações",
-              style: TextStyle(
+            child: Text(
+              s.pressM,
+              style: const TextStyle(
                 color: Colors.grey,
                 fontSize: 11,
               ),

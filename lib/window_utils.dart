@@ -3,6 +3,8 @@ import 'package:ffi/ffi.dart';
 import 'package:win32/win32.dart';
 
 class WindowUtils {
+  /// Must match the `title` set in MaterialApp and the Win32 window title.
+  static const String kWindowTitle = 'vdisplay';
   static bool _isFullscreen = false;
   static bool _isAlwaysOnTop = false;
   
@@ -15,7 +17,7 @@ class WindowUtils {
   static int _savedHeight = 720;
 
   static HWND getHwnd() {
-    final titlePtr = 'vdisplay'.toNativeUtf16();
+    final titlePtr = kWindowTitle.toNativeUtf16();
     final result = FindWindow(PCWSTR(nullptr), PCWSTR(titlePtr));
     calloc.free(titlePtr);
     return result.value;

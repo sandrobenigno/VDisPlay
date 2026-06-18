@@ -1,3 +1,4 @@
+import 'dart:developer' as dev;
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 
@@ -102,6 +103,9 @@ class NativeBindings {
   static late final GetCurrentFpsDart getCurrentFps;
 
   static bool _initialized = false;
+
+  /// Whether the native library was loaded and all symbols resolved.
+  static bool get isReady => _initialized;
 
   static void init() {
     if (_initialized) return;
@@ -215,7 +219,9 @@ class NativeBindings {
 
       _initialized = true;
     } catch (e) {
-      print('Erro ao carregar a biblioteca nativa: $e');
+      // Keep _initialized = false so all callers receive safe defaults.
+      dev.log('[NativeBindings] CRITICAL: Failed to load native_library.dll — $e', name: 'NativeBindings');
+      dev.log('[NativeBindings] Make sure native_library.dll is next to the executable.', name: 'NativeBindings');
     }
   }
 

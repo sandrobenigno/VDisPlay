@@ -40,8 +40,18 @@ class VideoPreviewManager extends ChangeNotifier {
     refreshDevices();
   }
 
+  /// Releases native resources. Call this when the application is closing,
+  /// not in dispose() because this is a singleton that is never garbage-collected.
+  void shutdown() {
+    stopPreview();
+    if (NativeBindings.isReady) {
+      NativeBindings.shutdownDevicesBackend();
+    }
+  }
+
   void refreshDevices() {
     _videoDevices.clear();
+    if (!NativeBindings.isReady) return;
     final count = NativeBindings.enumVideoDevices();
     for (int i = 0; i < count; i++) {
       final name = NativeBindings.getVideoDeviceName(i);
@@ -53,14 +63,14 @@ class VideoPreviewManager extends ChangeNotifier {
 
   int _selectedWidth = 0;
   int _selectedHeight = 0;
-  int _fpsPreference = 0; // 0 = Nativo, 30 = 30 FPS, 60 = 60 FPS
+  int _fpsPreference = 0; // 0 = Native, 30 = 30 FPS, 60 = 60 FPS
 
   int get selectedWidth => _selectedWidth;
   int get selectedHeight => _selectedHeight;
   int get fpsPreference => _fpsPreference;
 
   List<Size> get availableResolutions {
-    if (!_isCapturing) return [];
+    if (!_isCapturing || !NativeBindings.isReady) return [];
     final count = NativeBindings.getAvailableResolutionsCount();
     final list = <Size>[];
     for (int i = 0; i < count; i++) {
@@ -74,17 +84,17 @@ class VideoPreviewManager extends ChangeNotifier {
   }
 
   double get currentFps {
-    if (!_isCapturing) return 0.0;
+    if (!_isCapturing || !NativeBindings.isReady) return 0.0;
     return NativeBindings.getCurrentFps();
   }
 
   bool isFpsSupported(int width, int height, int targetFps) {
-    if (!_isCapturing) return false;
+    if (!_isCapturing || !NativeBindings.isReady) return false;
     return NativeBindings.isFpsSupported(width, height, targetFps) == 1;
   }
 
   Future<bool> changeResolutionAndFps(int width, int height, int fpsPref) async {
-    if (!_isCapturing) return false;
+    if (!_isCapturing || !NativeBindings.isReady) return false;
     final success = NativeBindings.setVideoResolutionAndFps(width, height, fpsPref);
     if (success == 1) {
       _selectedWidth = width;
@@ -115,17 +125,17 @@ class VideoPreviewManager extends ChangeNotifier {
         _isCapturing = success ?? false;
       }
 
-      if (_isCapturing) {
+      if (_isCapturing && NativeBindings.isReady) {
         _selectedWidth = NativeBindings.getVideoWidth();
         _selectedHeight = NativeBindings.getVideoHeight();
-        _fpsPreference = 0; // Default: Nativo
+        _fpsPreference = 0; // Default: Native
       }
 
       // Salva preferências do dispositivo ativo
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_video_device', deviceId);
     } catch (e) {
-      print('Erro ao iniciar preview: $e');
+      debugPrint('[VideoPreviewManager] startPreview error: $e');
       _isCapturing = false;
     }
 
@@ -140,7 +150,7 @@ class VideoPreviewManager extends ChangeNotifier {
       _textureId = null;
       _isCapturing = false;
     } catch (e) {
-      print('Erro ao parar preview: $e');
+      debugPrint('[VideoPreviewManager] stopPreview error: $e');
     }
     notifyListeners();
   }
@@ -148,8 +158,10 @@ class VideoPreviewManager extends ChangeNotifier {
   void setBrightness(int offset) {
     // Clampa entre -100 e 100
     _brightnessOffset = offset.clamp(-100, 100);
-    NativeBindings.setBrightnessOffset(_brightnessOffset);
-    
+    if (NativeBindings.isReady) {
+      NativeBindings.setBrightnessOffset(_brightnessOffset);
+    }
+
     // Salva preferências
     SharedPreferences.getInstance().then((prefs) {
       prefs.setInt('video_brightness_offset', _brightnessOffset);
@@ -159,12 +171,13 @@ class VideoPreviewManager extends ChangeNotifier {
   }
 
   Future<String?> takeScreenshot() async {
-    if (!_isCapturing) return null;
+    if (!_isCapturing || !NativeBindings.isReady) return null;
     try {
-      final dir = Directory.current.path;
+      // Use the executable's directory, which is reliable regardless of CWD.
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final filepath = '$dir\\screenshot_$timestamp.png';
-      
+      final filepath = '$exeDir${Platform.pathSeparator}screenshot_$timestamp.png';
+
       final filepathPtr = filepath.toNativeUtf8();
       final success = NativeBindings.saveScreenshot(filepathPtr);
       calloc.free(filepathPtr);
@@ -173,15 +186,15 @@ class VideoPreviewManager extends ChangeNotifier {
         return filepath;
       }
     } catch (e) {
-      print('Erro ao salvar screenshot: $e');
+      debugPrint('[VideoPreviewManager] takeScreenshot error: $e');
     }
     return null;
   }
 
   @override
   void dispose() {
-    stopPreview();
-    NativeBindings.shutdownDevicesBackend();
+    // Singleton: do NOT call shutdown() here.
+    // shutdown() is invoked explicitly by the app lifecycle observer in main.dart.
     super.dispose();
   }
 }

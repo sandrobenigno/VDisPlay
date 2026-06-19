@@ -86,10 +86,12 @@ The native kernel handles all critical I/O:
 
 #### 🔊 Audio — WASAPI
 
-* Low-latency shared-mode monitoring (MTA threading)
+* Event-driven low-latency shared-mode monitoring
 * RAW mode support (bypasses Windows DSP)
 * Branchless VU metering via function pointer dispatch
-* Float-precision linear resampling
+* High-fidelity Float-precision Cubic Hermite resampling
+* Dynamic drift compensation (P-controller) with pre-buffering to prevent skips and sync drops
+
 
 #### 🔧 MS2109 Stereo Fix
 

@@ -86,10 +86,12 @@ O kernel nativo lida com todas as E/S críticas:
 
 #### 🔊 Áudio — WASAPI
 
-* Monitoramento de baixa latência em modo compartilhado (threading MTA)
+* Monitoramento orientado a eventos de baixa latência em modo compartilhado
 * Suporte ao modo RAW (ignora o DSP do Windows)
 * Medição de VU sem ramificações (*branchless*) via despacho de ponteiro de função
-* Reamostragem linear com precisão de ponto flutuante (*float*)
+* Reamostragem Cúbica Hermite de alta fidelidade com precisão de ponto flutuante (*float*)
+* Compensação dinâmica de drift (Controlador P) com pré-buffering para evitar saltos e perda de sincronia
+
 
 #### 🔧 Correção Estéreo MS2109
 

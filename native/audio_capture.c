@@ -25,6 +25,31 @@ static IAudioClient*       g_render_client    = NULL;
 static IAudioRenderClient* g_render_client_out = NULL;
 
 static CRITICAL_SECTION g_audio_cs;
+static int g_prebuffering = 1;
+
+static HANDLE g_audio_event        = NULL;
+
+// Ring Buffers e Controle de Fase do Resampler
+#define INPUT_RING_BUFFER_SIZE_FRAMES 48000
+#define OUTPUT_RING_BUFFER_SIZE_FRAMES 48000
+
+static float g_input_ring_buffer[INPUT_RING_BUFFER_SIZE_FRAMES * 2];
+static float g_output_ring_buffer[OUTPUT_RING_BUFFER_SIZE_FRAMES * 2];
+
+static uint64_t g_input_frames_written = 0;
+static uint64_t g_output_frames_written = 0;
+static uint64_t g_output_frames_read = 0;
+static double   g_resampler_input_index = 0.0;
+
+// Interpolação Cúbica Hermite (Catmull-Rom)
+static inline float hermite_interp(float t, float y0, float y1, float y2, float y3) {
+    float c0 = y1;
+    float c1 = 0.5f * (y2 - y0);
+    float c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
+    float c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+    return ((c3 * t + c2) * t + c1) * t + c0;
+}
+
 
 // Configurações negociadas de entrada e saída
 static WORD  g_in_format_tag      = 0;
@@ -144,13 +169,11 @@ static DWORD WINAPI audio_thread_proc(LPVOID lpParam) {
     DWORD outRate     = g_out_sample_rate;
     GUID  outSub      = g_out_subformat;
 
-    // P4: seleciona ponteiros de função uma única vez antes do loop
     ReadSampleFn  readSample  = select_reader(inTag,  inBits,  &inSub);
     WriteSampleFn writeSample = select_writer(outTag, outBits, &outSub);
 
     HRESULT hr = g_capture_client->lpVtbl->Start(g_capture_client);
     if (FAILED(hr)) {
-        // R6: sinaliza parada para que o Flutter não fique lendo dados vazios
         g_is_audio_capturing = 0;
         return 0;
     }
@@ -159,119 +182,212 @@ static DWORD WINAPI audio_thread_proc(LPVOID lpParam) {
         hr = g_render_client->lpVtbl->Start(g_render_client);
         if (FAILED(hr)) {
             g_capture_client->lpVtbl->Stop(g_capture_client);
-            g_is_audio_capturing = 0;  // R6
+            g_is_audio_capturing = 0;
             return 0;
         }
     }
 
     while (g_is_audio_capturing) {
+        // Espera pelo evento WASAPI indicando novos dados disponíveis (ou timeout de 2s)
+        DWORD waitResult = WaitForSingleObject(g_audio_event, 2000);
+        if (waitResult != WAIT_OBJECT_0 || !g_is_audio_capturing) {
+            continue;
+        }
+
         UINT32 packetSize = 0;
-        hr = g_capture_client_in->lpVtbl->GetNextPacketSize(
-            g_capture_client_in, &packetSize);
+        hr = g_capture_client_in->lpVtbl->GetNextPacketSize(g_capture_client_in, &packetSize);
         if (FAILED(hr)) {
-            Sleep(5);
             continue;
         }
 
-        if (packetSize == 0) {
-            Sleep(1);
-            continue;
-        }
+        // Processa todos os pacotes acumulados
+        while (packetSize > 0 && g_is_audio_capturing) {
+            BYTE*  pCaptureData  = NULL;
+            UINT32 numFramesRead = 0;
+            DWORD  flags         = 0;
 
-        BYTE*  pCaptureData  = NULL;
-        UINT32 numFramesRead = 0;
-        DWORD  flags         = 0;
+            hr = g_capture_client_in->lpVtbl->GetBuffer(
+                g_capture_client_in,
+                &pCaptureData, &numFramesRead, &flags,
+                NULL, NULL);
 
-        hr = g_capture_client_in->lpVtbl->GetBuffer(
-            g_capture_client_in,
-            &pCaptureData, &numFramesRead, &flags,
-            NULL, NULL);
+            if (SUCCEEDED(hr) && numFramesRead > 0) {
+                EnterCriticalSection(&g_audio_cs);
+                int local_loopback     = g_enable_loopback;
+                int local_deinterleave = g_audio_deinterleave;
+                LeaveCriticalSection(&g_audio_cs);
 
-        if (FAILED(hr) || numFramesRead == 0) continue;
+                int   effChannels = inChannels;
+                DWORD effRate     = inRate;
+                UINT32 effFrames  = numFramesRead;
 
-        // 1. VU meter — P4: sem branches por amostra; usa ponteiro de função pré-selecionado
-        float peak = 0.0f;
-        UINT32 total_samples = numFramesRead * inChannels;
-        for (UINT32 i = 0; i < total_samples; i++) {
-            float val = readSample(pCaptureData, i);
-            float abs_val = val < 0.0f ? -val : val;
-            if (abs_val > peak) peak = abs_val;
-        }
+                if (local_deinterleave && inChannels == 1) {
+                    effChannels = 2;
+                    effRate     = inRate / 2;
+                    effFrames   = numFramesRead / 2;
+                }
 
-        // Aplica decaimento suave ao pico
-        EnterCriticalSection(&g_audio_cs);
-        if (peak > g_peak_volume) {
-            g_peak_volume = peak;
-        } else {
-            g_peak_volume = g_peak_volume * 0.95f + peak * 0.05f;
-        }
-        int local_loopback     = g_enable_loopback;
-        int local_deinterleave = g_audio_deinterleave;
-        LeaveCriticalSection(&g_audio_cs);
+                // Escreve os dados normalizados de entrada no buffer circular de entrada
+                float peak = 0.0f;
+                for (UINT32 f = 0; f < effFrames; f++) {
+                    float left_sample = 0.0f;
+                    float right_sample = 0.0f;
 
-        // 2. Loopback para alto-falantes
-        if (local_loopback && g_render_client_out) {
-            int   effChannels = inChannels;
-            DWORD effRate     = inRate;
-            UINT32 effFrames  = numFramesRead;
+                    if (local_deinterleave && inChannels == 1) {
+                        left_sample  = readSample(pCaptureData, (int)(f * 2 + 0));
+                        right_sample = readSample(pCaptureData, (int)(f * 2 + 1));
+                    } else if (inChannels == 1) {
+                        float s = readSample(pCaptureData, (int)f);
+                        left_sample  = s;
+                        right_sample = s;
+                    } else {
+                        left_sample  = readSample(pCaptureData, (int)(f * inChannels + 0));
+                        right_sample = readSample(pCaptureData, (int)(f * inChannels + 1));
+                    }
 
-            if (local_deinterleave && inChannels == 1) {
-                effChannels = 2;
-                effRate     = inRate / 2;
-                effFrames   = numFramesRead / 2;
-            }
+                    float abs_l = left_sample < 0.0f ? -left_sample : left_sample;
+                    float abs_r = right_sample < 0.0f ? -right_sample : right_sample;
+                    if (abs_l > peak) peak = abs_l;
+                    if (abs_r > peak) peak = abs_r;
 
-            // P3: resampling linear em float (era double desnecessariamente)
-            UINT32 numFramesWrite = (UINT32)(effFrames * (float)outRate / (float)effRate);
+                    uint64_t write_frame_index = g_input_frames_written + f;
+                    uint32_t ring_index = (uint32_t)(write_frame_index % INPUT_RING_BUFFER_SIZE_FRAMES);
+                    g_input_ring_buffer[ring_index * 2 + 0] = left_sample;
+                    g_input_ring_buffer[ring_index * 2 + 1] = right_sample;
+                }
+                g_input_frames_written += effFrames;
 
-            UINT32 padding = 0;
-            g_render_client->lpVtbl->GetCurrentPadding(g_render_client, &padding);
-            UINT32 bufferFrameCount = 0;
-            g_render_client->lpVtbl->GetBufferSize(g_render_client, &bufferFrameCount);
-            UINT32 availableSpace = bufferFrameCount - padding;
+                // VU Meter: decaimento suave
+                EnterCriticalSection(&g_audio_cs);
+                if (peak > g_peak_volume) {
+                    g_peak_volume = peak;
+                } else {
+                    g_peak_volume = g_peak_volume * 0.95f + peak * 0.05f;
+                }
+                LeaveCriticalSection(&g_audio_cs);
 
-            if (numFramesWrite <= availableSpace) {
-                BYTE* pRenderData = NULL;
-                hr = g_render_client_out->lpVtbl->GetBuffer(
-                    g_render_client_out, numFramesWrite, &pRenderData);
-                if (SUCCEEDED(hr)) {
-                    // Resampling linear com mapeamento de canais.
-                    // Envia áudio apenas para os canais frontal esquerdo (0) e direito (1).
-                    // Canais adicionais (centro, LFE, surround) são zerados para evitar
-                    // cancelamento de fase em sistemas 5.1/7.1.
-                    for (UINT32 j = 0; j < numFramesWrite; j++) {
-                        float x  = (float)j * (float)effFrames / (float)numFramesWrite;
-                        UINT32 k = (UINT32)x;
-                        float  t = x - (float)k;
+                 // Executa resampling Hermite para o Output Ring Buffer
+                 uint64_t buffered_frames = g_output_frames_written - g_output_frames_read;
+                 double target_buffer = outRate * 0.04; // 40ms target
+                 double error = (double)buffered_frames - target_buffer;
+                 double max_error = outRate * 0.1;
+                 if (error > max_error) error = max_error;
+                 if (error < -max_error) error = -max_error;
 
-                        for (WORD ch = 0; ch < outChannels; ch++) {
-                            float interpolated = 0.0f;
-                            if (ch <= 1) { // apenas L e R
-                                WORD in_ch = ch;
-                                if (effChannels == 1) {
-                                    in_ch = 0; // mono → stereo
-                                } else if (ch >= (WORD)effChannels) {
-                                    in_ch = (WORD)(effChannels - 1);
-                                }
-                                float s1 = readSample(pCaptureData,
-                                    (int)(k * effChannels + in_ch));
-                                float s2 = (k + 1 < effFrames)
-                                    ? readSample(pCaptureData,
-                                        (int)((k + 1) * effChannels + in_ch))
-                                    : s1;
-                                interpolated = clampf((1.0f - t) * s1 + t * s2);
-                            }
-                            writeSample(pRenderData,
-                                (int)(j * outChannels + ch), interpolated);
+                 double adjustment = (error / outRate) * 0.3; // 30% por segundo de erro
+                 if (adjustment > 0.02) adjustment = 0.02;
+                 if (adjustment < -0.02) adjustment = -0.02;
+
+                 double base_step = (double)effRate / outRate;
+                 double input_step = base_step * (1.0 + adjustment);
+
+                 while (g_resampler_input_index + 4.0 < (double)g_input_frames_written) {
+                     double input_frame_idx = g_resampler_input_index;
+                     int64_t k = (int64_t)floor(input_frame_idx);
+                     float t = (float)(input_frame_idx - k);
+
+                     int64_t idx_m1 = k - 1;
+                     int64_t idx_0  = k;
+                     int64_t idx_p1 = k + 1;
+                     int64_t idx_p2 = k + 2;
+
+                     uint32_t r_m1 = (uint32_t)((idx_m1 < 0 ? 0 : idx_m1) % INPUT_RING_BUFFER_SIZE_FRAMES);
+                     uint32_t r_0  = (uint32_t)((idx_0  < 0 ? 0 : idx_0)  % INPUT_RING_BUFFER_SIZE_FRAMES);
+                     uint32_t r_p1 = (uint32_t)((idx_p1 < 0 ? 0 : idx_p1) % INPUT_RING_BUFFER_SIZE_FRAMES);
+                     uint32_t r_p2 = (uint32_t)((idx_p2 < 0 ? 0 : idx_p2) % INPUT_RING_BUFFER_SIZE_FRAMES);
+
+                     float left_y0 = g_input_ring_buffer[r_m1 * 2 + 0];
+                     float left_y1 = g_input_ring_buffer[r_0  * 2 + 0];
+                     float left_y2 = g_input_ring_buffer[r_p1 * 2 + 0];
+                     float left_y3 = g_input_ring_buffer[r_p2 * 2 + 0];
+
+                     float right_y0 = g_input_ring_buffer[r_m1 * 2 + 1];
+                     float right_y1 = g_input_ring_buffer[r_0  * 2 + 1];
+                     float right_y2 = g_input_ring_buffer[r_p1 * 2 + 1];
+                     float right_y3 = g_input_ring_buffer[r_p2 * 2 + 1];
+
+                     float left_out  = clampf(hermite_interp(t, left_y0, left_y1, left_y2, left_y3));
+                     float right_out = clampf(hermite_interp(t, right_y0, right_y1, right_y2, right_y3));
+
+                     uint32_t out_ring_index = (uint32_t)(g_output_frames_written % OUTPUT_RING_BUFFER_SIZE_FRAMES);
+                     g_output_ring_buffer[out_ring_index * 2 + 0] = left_out;
+                     g_output_ring_buffer[out_ring_index * 2 + 1] = right_out;
+
+                     g_output_frames_written++;
+                     g_resampler_input_index += input_step;
+                 }
+
+                // 2. Loopback para alto-falantes
+                if (local_loopback && g_render_client_out) {
+                    UINT32 padding = 0;
+                    g_render_client->lpVtbl->GetCurrentPadding(g_render_client, &padding);
+                    UINT32 bufferFrameCount = 0;
+                    g_render_client->lpVtbl->GetBufferSize(g_render_client, &bufferFrameCount);
+
+                    UINT32 availableSpace = bufferFrameCount - padding;
+                    uint64_t buffered_frames = g_output_frames_written - g_output_frames_read;
+
+                    // Ajusta drift caso o atraso seja superior a 100ms
+                    if (buffered_frames > outRate * 0.1) {
+                        g_output_frames_read = g_output_frames_written - (uint64_t)(outRate * 0.03);
+                        buffered_frames = g_output_frames_written - g_output_frames_read;
+                    }
+                    if (g_output_frames_written < g_output_frames_read) {
+                        g_output_frames_read = g_output_frames_written;
+                        buffered_frames = 0;
+                    }
+
+                    // Pre-buffering para evitar engasgos iniciais e subfluxo
+                    UINT32 numFramesWrite = availableSpace;
+                    if (g_prebuffering) {
+                        if (buffered_frames >= (uint64_t)(outRate * 0.04)) { // 40ms
+                            g_prebuffering = 0;
+                        } else {
+                            numFramesWrite = 0;
                         }
                     }
-                    g_render_client_out->lpVtbl->ReleaseBuffer(
-                        g_render_client_out, numFramesWrite, 0);
+
+                    if (!g_prebuffering) {
+                        // Limita a escrita ao que realmente temos no buffer circular para evitar silêncio artificial
+                        if (numFramesWrite > buffered_frames) {
+                            numFramesWrite = (UINT32)buffered_frames;
+                        }
+                    }
+
+                    if (numFramesWrite > 0) {
+                        BYTE* pRenderData = NULL;
+                        hr = g_render_client_out->lpVtbl->GetBuffer(g_render_client_out, numFramesWrite, &pRenderData);
+                        if (SUCCEEDED(hr)) {
+                            for (UINT32 j = 0; j < numFramesWrite; j++) {
+                                uint32_t out_ring_index = (uint32_t)((g_output_frames_read + j) % OUTPUT_RING_BUFFER_SIZE_FRAMES);
+                                float left_out  = g_output_ring_buffer[out_ring_index * 2 + 0];
+                                float right_out = g_output_ring_buffer[out_ring_index * 2 + 1];
+
+                                for (WORD ch = 0; ch < outChannels; ch++) {
+                                    float val = 0.0f;
+                                    if (ch == 0) val = left_out;
+                                    else if (ch == 1) val = right_out;
+                                    writeSample(pRenderData, (int)(j * outChannels + ch), val);
+                                }
+                            }
+
+                            g_output_frames_read += numFramesWrite;
+                            g_render_client_out->lpVtbl->ReleaseBuffer(g_render_client_out, numFramesWrite, 0);
+                        }
+                    }
+                } else {
+                    // Se o loopback estiver desligado, apenas descarta os dados gerados
+                    g_output_frames_read = g_output_frames_written;
                 }
+
+                g_capture_client_in->lpVtbl->ReleaseBuffer(g_capture_client_in, numFramesRead);
+            }
+
+            hr = g_capture_client_in->lpVtbl->GetNextPacketSize(g_capture_client_in, &packetSize);
+            if (FAILED(hr)) {
+                break;
             }
         }
-
-        g_capture_client_in->lpVtbl->ReleaseBuffer(g_capture_client_in, numFramesRead);
     }
 
     g_capture_client->lpVtbl->Stop(g_capture_client);
@@ -372,14 +488,29 @@ EXPORT int start_audio_capture(const char* device_id, int enable_loopback) {
         memset(&g_in_subformat, 0, sizeof(GUID));
     }
 
-    // Inicializa captura em modo compartilhado com buffer de 20ms
+    // Inicializa captura em modo compartilhado com buffer de 20ms e suporte a eventos
     REFERENCE_TIME bufferDuration = 200000;
     hr = g_capture_client->lpVtbl->Initialize(
         g_capture_client, AUDCLNT_SHAREMODE_SHARED,
-        0, bufferDuration, 0, pFormatIn, NULL);
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, bufferDuration, 0, pFormatIn, NULL);
     CoTaskMemFree(pFormatIn);
 
     if (FAILED(hr)) {
+        g_capture_client->lpVtbl->Release(g_capture_client); g_capture_client = NULL;
+        g_capture_device->lpVtbl->Release(g_capture_device); g_capture_device = NULL;
+        return 0;
+    }
+
+    g_audio_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!g_audio_event) {
+        g_capture_client->lpVtbl->Release(g_capture_client); g_capture_client = NULL;
+        g_capture_device->lpVtbl->Release(g_capture_device); g_capture_device = NULL;
+        return 0;
+    }
+
+    hr = g_capture_client->lpVtbl->SetEventHandle(g_capture_client, g_audio_event);
+    if (FAILED(hr)) {
+        CloseHandle(g_audio_event); g_audio_event = NULL;
         g_capture_client->lpVtbl->Release(g_capture_client); g_capture_client = NULL;
         g_capture_device->lpVtbl->Release(g_capture_device); g_capture_device = NULL;
         return 0;
@@ -389,13 +520,13 @@ EXPORT int start_audio_capture(const char* device_id, int enable_loopback) {
         g_capture_client, &local_IID_IAudioCaptureClient,
         (void**)&g_capture_client_in);
     if (FAILED(hr)) {
+        CloseHandle(g_audio_event); g_audio_event = NULL;
         g_capture_client->lpVtbl->Release(g_capture_client); g_capture_client = NULL;
         g_capture_device->lpVtbl->Release(g_capture_device); g_capture_device = NULL;
         return 0;
     }
 
     // Inicializa dispositivo de saída (sempre, para permitir ativação dinâmica do loopback)
-    // R10: removido `if (1)` espúrio — bloco sempre executado, desaninhado diretamente
     {
         IMMDeviceEnumerator* pEnum = NULL;
         hr = CoCreateInstance(&COMMON_CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL,
@@ -440,6 +571,14 @@ EXPORT int start_audio_capture(const char* device_id, int enable_loopback) {
     }
 
     g_peak_volume        = 0.0f;
+    g_prebuffering       = 1;
+    g_input_frames_written = 0;
+    g_output_frames_written = 0;
+    g_output_frames_read = 0;
+    g_resampler_input_index = 0.0;
+    memset(g_input_ring_buffer, 0, sizeof(g_input_ring_buffer));
+    memset(g_output_ring_buffer, 0, sizeof(g_output_ring_buffer));
+
     g_is_audio_capturing = 1;
 
     g_audio_thread = CreateThread(NULL, 0, audio_thread_proc, NULL, 0, NULL);
@@ -451,6 +590,7 @@ EXPORT int start_audio_capture(const char* device_id, int enable_loopback) {
         g_capture_client = NULL;
         g_capture_device->lpVtbl->Release(g_capture_device);
         g_capture_device = NULL;
+        CloseHandle(g_audio_event); g_audio_event = NULL;
 
         if (g_render_client_out) { g_render_client_out->lpVtbl->Release(g_render_client_out); g_render_client_out = NULL; }
         if (g_render_client)     { g_render_client->lpVtbl->Release(g_render_client);         g_render_client     = NULL; }
@@ -469,10 +609,20 @@ EXPORT void stop_audio_capture() {
 
     g_is_audio_capturing = 0;
 
+    // Acorda a thread imediatamente se estiver travada no WaitForSingleObject
+    if (g_audio_event) {
+        SetEvent(g_audio_event);
+    }
+
     if (g_audio_thread) {
         WaitForSingleObject(g_audio_thread, INFINITE);
         CloseHandle(g_audio_thread);
         g_audio_thread = NULL;
+    }
+
+    if (g_audio_event) {
+        CloseHandle(g_audio_event);
+        g_audio_event = NULL;
     }
 
     if (g_capture_client_in) { g_capture_client_in->lpVtbl->Release(g_capture_client_in); g_capture_client_in = NULL; }

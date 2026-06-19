@@ -1,5 +1,7 @@
 # VDisPlay 📺🔊
 
+🇺🇸 English | 🇧🇷 [Português](README.pt-BR.md)
+
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue.svg)](#)
 [![Latency](https://img.shields.io/badge/latency-sub--100ms-success.svg)](#)
 [![Backend](https://img.shields.io/badge/backend-C-critical.svg)](#)

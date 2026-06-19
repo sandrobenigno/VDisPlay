@@ -1,8 +1,10 @@
 # VDisPlay 📺🔊
 
-[![Platform](https://img.shields.io/badge/platform-Windows-blue.svg)](#)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
-[![Stack](https://img.shields.io/badge/stack-Flutter%20%7C%20C%20%7C%20FFI-orange.svg)](#)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue.svg)](#)
+[![Latency](https://img.shields.io/badge/latency-sub--100ms-success.svg)](#)
+[![Backend](https://img.shields.io/badge/backend-C-critical.svg)](#)
+[![Frontend](https://img.shields.io/badge/frontend-Flutter-54C5F8.svg)](#)
+[![License: GPL v3](https://img.shields.io/badge/license-GNU%20GPL%20v3-blue.svg)](LICENSE)
 
 **VDisPlay** is a lightweight real-time video and audio monitor with **sub-100ms latency**, designed for developers, technicians, and gamers.
 

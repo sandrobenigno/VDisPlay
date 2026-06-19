@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'l10n.dart';
 
 class HelpOverlay extends StatelessWidget {
@@ -88,9 +89,9 @@ class HelpOverlay extends StatelessWidget {
                         border: Border.all(
                             color: Colors.white.withOpacity(0.05)),
                       ),
-                      child: const Column(
+                      child: Column(
                         children: [
-                          Text(
+                          const Text(
                             'VDisPlay V1.0',
                             style: TextStyle(
                               color: Colors.white,
@@ -98,11 +99,24 @@ class HelpOverlay extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          SizedBox(height: 4),
-                          Text(
+                          const SizedBox(height: 4),
+                          const Text(
                             'By Sandro Benigno (2026)',
                             style:
                                 TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                          const SizedBox(height: 4),
+                          InkWell(
+                            onTap: () => launchUrl(Uri.parse('https://github.com/sandrobenigno')),
+                            child: const Text(
+                              'https://github.com/sandrobenigno',
+                              style: TextStyle(
+                                color: Colors.blue,
+                                fontSize: 12,
+                                decoration: TextDecoration.underline,
+                                decorationColor: Colors.blue,
+                              ),
+                            ),
                           ),
                         ],
                       ),

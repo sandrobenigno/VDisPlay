@@ -2,6 +2,7 @@
 
 🇺🇸 English | 🇧🇷 [Português](README.pt-BR.md)
 
+[![Latest Release](https://img.shields.io/github/v/release/sandrobenigno/VDisPlay?color=success&label=latest%20release)](https://github.com/sandrobenigno/VDisPlay/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue.svg)](#)
 [![Latency](https://img.shields.io/badge/latency-sub--100ms-success.svg)](#)
 [![Backend](https://img.shields.io/badge/backend-C-critical.svg)](#)
@@ -11,6 +12,8 @@
 **VDisPlay** is a lightweight real-time video and audio monitor with **sub-100ms latency**, designed for developers, technicians, and gamers.
 
 Built for HDMI USB capture cards and webcams, it provides a fast and direct way to inspect video output from game consoles, SBCs, embedded systems, DSLR cameras, and other streaming devices — without the complexity of full recording suites like OBS.
+
+### 📥 [Download Latest Release (Installer & Portable)](https://github.com/sandrobenigno/VDisPlay/releases/latest)
 
 ![Gameplay screen](imgs/vdisplay_game.jpg)
 ---

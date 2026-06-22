@@ -92,7 +92,7 @@ class HelpOverlay extends StatelessWidget {
                       child: Column(
                         children: [
                           const Text(
-                            'VDisPlay V1.0',
+                            'VDisPlay V1.0.1',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 15,

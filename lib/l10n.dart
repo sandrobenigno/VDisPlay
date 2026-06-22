@@ -21,6 +21,7 @@ abstract class AppStrings {
   String get menuTitle;
   String get videoSection;
   String get audioSection;
+  String get audioOutputSection;
   String get monitorAudioLabel;
   String get stereoCorrectionLabel;
   String get stereoCorrectionDesc;
@@ -113,7 +114,8 @@ class _AppStringsEn implements AppStrings {
 
   @override String get menuTitle => 'Devices & Settings';
   @override String get videoSection => 'VIDEO (Press 1-9)';
-  @override String get audioSection => 'AUDIO';
+  @override String get audioSection => 'AUDIO INPUT';
+  @override String get audioOutputSection => 'AUDIO OUTPUT';
   @override String get monitorAudioLabel => 'Monitor Audio (Speakers)';
   @override String get stereoCorrectionLabel => 'Stereo Correction (HDMI Capture)';
   @override String get stereoCorrectionDesc => 'For 96kHz mono capture cards (MS2109)';
@@ -220,7 +222,8 @@ class _AppStringsPt implements AppStrings {
 
   @override String get menuTitle => 'Dispositivos e Ajustes';
   @override String get videoSection => 'VÍDEO (Pressione 1-9)';
-  @override String get audioSection => 'ÁUDIO';
+  @override String get audioSection => 'ENTRADA DE ÁUDIO';
+  @override String get audioOutputSection => 'SAÍDA DE ÁUDIO';
   @override String get monitorAudioLabel => 'Monitorar Áudio (Alto-falantes)';
   @override String get stereoCorrectionLabel => 'Correção Estéreo (Placa HDMI)';
   @override String get stereoCorrectionDesc =>

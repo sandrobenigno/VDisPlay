@@ -11,12 +11,14 @@ class AudioManager extends ChangeNotifier {
   AudioManager._internal();
 
   String? _selectedDeviceId;
+  String? _selectedOutputDeviceId;
   bool _isLoopbackEnabled = false;
   bool _isDeinterleaveEnabled = false;
   double _peakVolume = 0.0;
   Timer? _vuTimer;
 
   String? get selectedDeviceId => _selectedDeviceId;
+  String? get selectedOutputDeviceId => _selectedOutputDeviceId;
   bool get isLoopbackEnabled => _isLoopbackEnabled;
   bool get isDeinterleaveEnabled => _isDeinterleaveEnabled;
   double get peakVolume => _peakVolume;
@@ -51,6 +53,12 @@ class AudioManager extends ChangeNotifier {
     _isLoopbackEnabled = prefs.getBool('audio_loopback_enabled') ?? false;
     _isDeinterleaveEnabled =
         prefs.getBool('audio_deinterleave_enabled') ?? false;
+
+    final savedAudioOutputDevice = prefs.getString('last_audio_output_device');
+    if (savedAudioOutputDevice != null && NativeBindings.isReady) {
+      _selectedOutputDeviceId = savedAudioOutputDevice;
+      NativeBindings.setAudioOutputDevice(savedAudioOutputDevice);
+    }
 
     final savedAudioDevice = prefs.getString('last_audio_device');
     if (savedAudioDevice != null && NativeBindings.isReady) {
@@ -119,6 +127,26 @@ class AudioManager extends ChangeNotifier {
     await prefs.setBool('audio_deinterleave_enabled', enabled);
 
     notifyListeners();
+  }
+
+  Future<void> setOutputDevice(String deviceId) async {
+    _selectedOutputDeviceId = deviceId;
+    if (NativeBindings.isReady) {
+      NativeBindings.setAudioOutputDevice(deviceId);
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('last_audio_output_device', deviceId);
+
+    // If already capturing, we should ideally restart capture so the backend picks up the new output device.
+    if (isCapturing && _selectedDeviceId != null) {
+      await stopCapture();
+      // small delay to let backend shutdown
+      await Future.delayed(const Duration(milliseconds: 100));
+      await startCapture(_selectedDeviceId!, _isLoopbackEnabled);
+    } else {
+      notifyListeners();
+    }
   }
 
 }

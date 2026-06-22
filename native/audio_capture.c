@@ -15,6 +15,7 @@ static volatile int g_is_audio_capturing = 0;  // R3: volatile para visibilidade
 static int    g_enable_loopback    = 0;
 static float  g_peak_volume        = 0.0f;
 static int    g_audio_deinterleave = 0;
+static char   g_selected_render_device_id[512] = "";
 
 static IMMDevice*          g_capture_device   = NULL;
 static IAudioClient*       g_capture_client   = NULL;
@@ -23,6 +24,15 @@ static IAudioCaptureClient* g_capture_client_in = NULL;
 static IMMDevice*          g_render_device    = NULL;
 static IAudioClient*       g_render_client    = NULL;
 static IAudioRenderClient* g_render_client_out = NULL;
+
+EXPORT void set_audio_output_device(const char* deviceId) {
+    if (deviceId) {
+        strncpy(g_selected_render_device_id, deviceId, sizeof(g_selected_render_device_id) - 1);
+        g_selected_render_device_id[sizeof(g_selected_render_device_id) - 1] = '\0';
+    } else {
+        g_selected_render_device_id[0] = '\0';
+    }
+}
 
 static CRITICAL_SECTION g_audio_cs;
 static int g_prebuffering = 1;
@@ -545,8 +555,16 @@ EXPORT int start_audio_capture(const char* device_id, int enable_loopback) {
         hr = CoCreateInstance(&COMMON_CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL,
             &COMMON_IID_IMMDeviceEnumerator, (void**)&pEnum);
         if (SUCCEEDED(hr)) {
-            hr = pEnum->lpVtbl->GetDefaultAudioEndpoint(
-                pEnum, eRender, eConsole, &g_render_device);
+            hr = E_FAIL;
+            if (g_selected_render_device_id[0] != '\0') {
+                WCHAR wDeviceId[512];
+                utf8_to_wchar(g_selected_render_device_id, wDeviceId, 512);
+                hr = pEnum->lpVtbl->GetDevice(pEnum, wDeviceId, &g_render_device);
+            }
+            if (FAILED(hr)) {
+                hr = pEnum->lpVtbl->GetDefaultAudioEndpoint(
+                    pEnum, eRender, eConsole, &g_render_device);
+            }
             if (SUCCEEDED(hr)) {
                 hr = g_render_device->lpVtbl->Activate(
                     g_render_device, &local_IID_IAudioClient,

@@ -3,13 +3,26 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'l10n.dart';
 
-class HelpOverlay extends StatelessWidget {
+class HelpOverlay extends StatefulWidget {
   final VoidCallback onClose;
 
   const HelpOverlay({
     Key? key,
     required this.onClose,
   }) : super(key: key);
+
+  @override
+  State<HelpOverlay> createState() => _HelpOverlayState();
+}
+
+class _HelpOverlayState extends State<HelpOverlay> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +41,7 @@ class HelpOverlay extends StatelessWidget {
               filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
               child: Container(
                 width: 500,
-                height: 610,
+                height: 620,
                 decoration: BoxDecoration(
                   color: const Color(0xEC121212),
                   borderRadius: BorderRadius.circular(16),
@@ -72,7 +85,7 @@ class HelpOverlay extends StatelessWidget {
                         IconButton(
                           icon: const Icon(Icons.close,
                               color: Colors.white54),
-                          onPressed: onClose,
+                          onPressed: widget.onClose,
                           hoverColor: Colors.white.withOpacity(0.05),
                           splashRadius: 20,
                         ),
@@ -184,39 +197,70 @@ class HelpOverlay extends StatelessWidget {
 
                     // Shortcuts Scrollable area
                     Expanded(
-                      child: ListView(
-                        physics: const BouncingScrollPhysics(),
-                        children: [
-                          _buildShortcutRow('M', s.skMenuTitle, s.skMenuDesc),
-                          _buildShortcutRow('H', s.skHelpTitle, s.skHelpDesc),
-                          _buildShortcutRow('R', s.skResTitle, s.skResDesc),
-                          _buildShortcutRow('F / F11', s.skFullscreenTitle,
-                              s.skFullscreenDesc),
-                          _buildShortcutRow(
-                              'ESC', s.skEscTitle, s.skEscDesc),
-                          _buildShortcutRow('T', s.skTopTitle, s.skTopDesc),
-                          _buildShortcutRow(
-                              'S', s.skScreenshotTitle, s.skScreenshotDesc),
-                          _buildShortcutRow('+ / -', s.skBrightnessTitle,
-                              s.skBrightnessDesc),
-                          _buildShortcutRow(
-                              'F12', s.skAudioTitle, s.skAudioDesc),
-                          _buildShortcutRow(
-                              '1 – 9', s.skChannelTitle, s.skChannelDesc),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Footer hint
-                    Center(
-                      child: Text(
-                        s.pressEscToClose,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.3),
-                          fontSize: 11,
+                      child: ScrollbarTheme(
+                        data: ScrollbarThemeData(
+                          thumbColor: MaterialStateProperty.all(Colors.blueAccent.withOpacity(0.5)),
+                          trackColor: MaterialStateProperty.all(Colors.white.withOpacity(0.03)),
+                          trackBorderColor: MaterialStateProperty.all(Colors.transparent),
+                        ),
+                        child: Scrollbar(
+                          controller: _scrollController,
+                          thumbVisibility: true,
+                          trackVisibility: true,
+                          interactive: true,
+                          thickness: 5,
+                          radius: const Radius.circular(3),
+                          child: ListView(
+                            controller: _scrollController,
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.only(right: 12),
+                            children: [
+                              _buildShortcutRow('M', s.skMenuTitle, s.skMenuDesc),
+                              _buildShortcutRow('H', s.skHelpTitle, s.skHelpDesc),
+                              _buildShortcutRow('R', s.skResTitle, s.skResDesc),
+                              _buildShortcutRow('F / F11', s.skFullscreenTitle,
+                                  s.skFullscreenDesc),
+                              _buildShortcutRow(
+                                  'ESC', s.skEscTitle, s.skEscDesc),
+                              _buildShortcutRow('T', s.skTopTitle, s.skTopDesc),
+                              _buildShortcutRow(
+                                  'S', s.skScreenshotTitle, s.skScreenshotDesc),
+                              _buildShortcutRow('+ / -', s.skBrightnessTitle,
+                                  s.skBrightnessDesc),
+                              _buildShortcutRow(
+                                  'F12', s.skAudioTitle, s.skAudioDesc),
+                              _buildShortcutRow(
+                                  '1 – 9', s.skChannelTitle, s.skChannelDesc),
+                            ],
+                          ),
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Footer Actions
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          s.pressEscToClose,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.3),
+                            fontSize: 11,
+                          ),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: widget.onClose,
+                          child: Text(s.doneLabel,
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 12)),
+                        )
+                      ],
                     ),
                   ],
                 ),

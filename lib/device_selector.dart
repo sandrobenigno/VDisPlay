@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +23,7 @@ class DeviceSelectorOverlay extends StatefulWidget {
 
 class _DeviceSelectorOverlayState extends State<DeviceSelectorOverlay> {
   final List<Map<String, String>> _audioDevices = [];
+  final List<Map<String, String>> _audioOutputDevices = [];
 
   @override
   void initState() {
@@ -31,7 +33,9 @@ class _DeviceSelectorOverlayState extends State<DeviceSelectorOverlay> {
 
   void _refreshAudioDevices() {
     _audioDevices.clear();
+    _audioOutputDevices.clear();
     if (!NativeBindings.isReady) return;
+    
     final count = NativeBindings.enumAudioDevices();
     for (int i = 0; i < count; i++) {
       _audioDevices.add({
@@ -39,7 +43,97 @@ class _DeviceSelectorOverlayState extends State<DeviceSelectorOverlay> {
         'id': NativeBindings.getAudioDeviceId(i),
       });
     }
+
+    final outCount = NativeBindings.enumAudioOutputDevices();
+    for (int i = 0; i < outCount; i++) {
+      _audioOutputDevices.add({
+        'name': NativeBindings.getAudioOutputDeviceName(i),
+        'id': NativeBindings.getAudioOutputDeviceId(i),
+      });
+    }
+
     setState(() {});
+  }
+
+  Widget _buildDropdown({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required List<Map<String, String>> items,
+    required String? selectedId,
+    required void Function(String?) onChanged,
+    required String noItemsText,
+  }) {
+    // If the selectedId is not in the list (e.g. unplugged), we just show null
+    final hasSelectedItem = selectedId != null && items.any((e) => e['id'] == selectedId);
+    final value = hasSelectedItem ? selectedId : (items.isNotEmpty ? items.first['id'] : null);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 6),
+        if (items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: Text(
+              noItemsText,
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          )
+        else
+          Container(
+            height: 38,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white.withOpacity(0.12)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                dropdownColor: const Color(0xFF1E1E1E),
+                icon: Icon(Icons.arrow_drop_down, color: color),
+                value: value,
+                onChanged: onChanged,
+                items: items.map((device) {
+                  final id = device['id']!;
+                  final name = device['name']!;
+                  return DropdownMenuItem<String>(
+                    value: id,
+                    child: Row(
+                      children: [
+                        Icon(icon, color: selectedId == id ? color : Colors.grey, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: TextStyle(
+                              color: selectedId == id ? Colors.white : Colors.grey[300],
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
 
@@ -69,7 +163,7 @@ class _DeviceSelectorOverlayState extends State<DeviceSelectorOverlay> {
                 style: const TextStyle(color: Colors.white)),
             onPressed: () {
               Navigator.pop(context);
-              SystemNavigator.pop();
+              exit(0);
             },
           ),
         ],
@@ -90,7 +184,7 @@ class _DeviceSelectorOverlayState extends State<DeviceSelectorOverlay> {
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
             width: 480,
-            height: 540,
+            height: 480,
             decoration: BoxDecoration(
               color: const Color(0xEC121212),
               borderRadius: BorderRadius.circular(16),
@@ -142,210 +236,62 @@ class _DeviceSelectorOverlayState extends State<DeviceSelectorOverlay> {
                 ),
                 const Divider(color: Colors.white12, height: 8),
 
-                // Video Section
-                Text(
-                  s.videoSection,
-                  style: const TextStyle(
-                    color: Colors.blueAccent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                  ),
+                _buildDropdown(
+                  label: s.videoSection,
+                  icon: Icons.videocam,
+                  color: Colors.blueAccent,
+                  items: videoManager.videoDevices,
+                  selectedId: videoManager.selectedDeviceId,
+                  noItemsText: s.noVideoDevices,
+                  onChanged: (id) {
+                    if (id != null) {
+                      final name = videoManager.videoDevices.firstWhere((e) => e['id'] == id)['name']!;
+                      videoManager.startPreview(id, name).then((_) {
+                        widget.showToast(s.toastVideo(name));
+                        setState(() {});
+                      });
+                    }
+                  },
                 ),
-                const SizedBox(height: 6),
-                Expanded(
-                  child: videoManager.videoDevices.isEmpty
-                      ? Center(
-                          child: Text(
-                            s.noVideoDevices,
-                            style: const TextStyle(
-                                color: Colors.grey, fontSize: 12),
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: videoManager.videoDevices.length,
-                          itemBuilder: (context, index) {
-                            final device = videoManager.videoDevices[index];
-                            final id = device['id']!;
-                            final name = device['name']!;
-                            final isSelected =
-                                videoManager.selectedDeviceId == id;
-
-                            return Container(
-                              margin: const EdgeInsets.symmetric(
-                                  vertical: 1.0),
-                              child: InkWell(
-                                onTap: () {
-                                  videoManager
-                                      .startPreview(id, name)
-                                      .then((_) {
-                                    widget.showToast(s.toastVideo(name));
-                                    setState(() {});
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? Colors.blueAccent.withOpacity(0.20)
-                                        : Colors.white.withOpacity(0.08),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? Colors.blueAccent.withOpacity(0.60)
-                                          : Colors.white.withOpacity(0.12),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 18,
-                                        height: 18,
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? Colors.blueAccent
-                                              : Colors.white10,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            '${index + 1}',
-                                            style: TextStyle(
-                                              color: isSelected
-                                                  ? Colors.white
-                                                  : Colors.grey[400],
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          name,
-                                          style: TextStyle(
-                                            color: isSelected
-                                                ? Colors.white
-                                                : Colors.grey[300],
-                                            fontWeight: isSelected
-                                                ? FontWeight.bold
-                                                : FontWeight.normal,
-                                            fontSize: 13,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                const SizedBox(height: 12),
+                
+                _buildDropdown(
+                  label: s.audioSection,
+                  icon: Icons.mic,
+                  color: Colors.teal,
+                  items: _audioDevices,
+                  selectedId: audioManager.selectedDeviceId,
+                  noItemsText: s.noAudioDevices,
+                  onChanged: (id) {
+                    if (id != null) {
+                      final name = _audioDevices.firstWhere((e) => e['id'] == id)['name']!;
+                      audioManager.startCapture(id, audioManager.isLoopbackEnabled).then((channels) {
+                        if (channels == 1) {
+                          widget.showToast(s.toastAudioMono2);
+                        } else {
+                          widget.showToast(s.toastAudio(name));
+                        }
+                        setState(() {});
+                      });
+                    }
+                  },
                 ),
-                const SizedBox(height: 8),
-                const Divider(color: Colors.white12, height: 1),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
 
-                // Audio Section
-                Text(
-                  s.audioSection,
-                  style: const TextStyle(
-                    color: Colors.blueAccent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Expanded(
-                  child: _audioDevices.isEmpty
-                      ? Center(
-                          child: Text(
-                            s.noAudioDevices,
-                            style: const TextStyle(
-                                color: Colors.grey, fontSize: 12),
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: _audioDevices.length,
-                          itemBuilder: (context, index) {
-                            final device = _audioDevices[index];
-                            final id = device['id']!;
-                            final name = device['name']!;
-                            final isSelected =
-                                audioManager.selectedDeviceId == id;
-
-                            return Container(
-                              margin: const EdgeInsets.symmetric(
-                                  vertical: 1.0),
-                              child: InkWell(
-                                onTap: () {
-                                  audioManager
-                                      .startCapture(
-                                          id, audioManager.isLoopbackEnabled)
-                                      .then((channels) {
-                                    if (channels == 1) {
-                                      widget.showToast(s.toastAudioMono2);
-                                    } else {
-                                      widget.showToast(s.toastAudio(name));
-                                    }
-                                    setState(() {});
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? Colors.teal.withOpacity(0.20)
-                                        : Colors.white.withOpacity(0.08),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? Colors.teal.withOpacity(0.60)
-                                          : Colors.white.withOpacity(0.12),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.mic,
-                                        color: isSelected
-                                            ? Colors.teal
-                                            : Colors.grey,
-                                        size: 16,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          name,
-                                          style: TextStyle(
-                                            color: isSelected
-                                                ? Colors.white
-                                                : Colors.grey[300],
-                                            fontWeight: isSelected
-                                                ? FontWeight.bold
-                                                : FontWeight.normal,
-                                            fontSize: 13,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                _buildDropdown(
+                  label: s.audioOutputSection,
+                  icon: Icons.speaker,
+                  color: Colors.orangeAccent,
+                  items: _audioOutputDevices,
+                  selectedId: audioManager.selectedOutputDeviceId,
+                  noItemsText: s.noAudioDevices,
+                  onChanged: (id) {
+                    if (id != null) {
+                      audioManager.setOutputDevice(id).then((_) {
+                        setState(() {});
+                      });
+                    }
+                  },
                 ),
                 const SizedBox(height: 8),
 

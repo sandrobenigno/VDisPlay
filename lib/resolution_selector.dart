@@ -51,14 +51,18 @@ class _ResolutionSelectorOverlayState
     final activeFpsPreference = _videoManager.fpsPreference;
     final hasCapture = _videoManager.isCapturing;
 
+    final String? selectedValue = available.any((size) => size.width.toInt() == activeWidth && size.height.toInt() == activeHeight)
+        ? '${activeWidth}x$activeHeight'
+        : (available.isNotEmpty ? '${available.first.width.toInt()}x${available.first.height.toInt()}' : null);
+
     return Center(
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
-            width: 460,
-            height: 520,
+            width: 440,
+            height: hasCapture ? 400 : 240,
             decoration: BoxDecoration(
               color: const Color(0xEC121212),
               borderRadius: BorderRadius.circular(16),
@@ -179,87 +183,30 @@ class _ResolutionSelectorOverlayState
                       ],
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
 
-                  // Lista de resoluções
-                  Text(
-                    s.availableResolutionsLabel,
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
+                  // Dropdown de resoluções
+                  _buildResolutionDropdown(
+                    label: s.availableResolutionsLabel,
+                    icon: Icons.aspect_ratio,
+                    color: Colors.blueAccent,
+                    items: available,
+                    selectedValue: selectedValue,
+                    noItemsText: s.noResolutionsLabel,
+                    onChanged: (val) {
+                      if (val != null) {
+                        final parts = val.split('x');
+                        if (parts.length == 2) {
+                          final w = int.tryParse(parts[0]);
+                          final h = int.tryParse(parts[1]);
+                          if (w != null && h != null) {
+                            _changeFormat(w, h, activeFpsPreference);
+                          }
+                        }
+                      }
+                    },
                   ),
-                  const SizedBox(height: 8),
-
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black26,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: Colors.white.withOpacity(0.04)),
-                      ),
-                      child: available.isEmpty
-                          ? Center(
-                              child: Text(
-                                s.noResolutionsLabel,
-                                style: const TextStyle(
-                                    color: Colors.grey, fontSize: 12),
-                              ),
-                            )
-                          : Scrollbar(
-                              child: ListView.builder(
-                                shrinkWrap: true,
-                                itemCount: available.length,
-                                physics: const BouncingScrollPhysics(),
-                                itemBuilder: (context, index) {
-                                  final size = available[index];
-                                  final w = size.width.toInt();
-                                  final h = size.height.toInt();
-                                  final isSelected =
-                                      (w == activeWidth && h == activeHeight);
-
-                                  return Material(
-                                    color: Colors.transparent,
-                                    child: ListTile(
-                                      title: Text(
-                                        '$w x $h',
-                                        style: TextStyle(
-                                          color: isSelected
-                                              ? Colors.blueAccent
-                                              : Colors.white70,
-                                          fontSize: 14,
-                                          fontWeight: isSelected
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
-                                        ),
-                                      ),
-                                      trailing: isSelected
-                                          ? const Icon(Icons.check_circle,
-                                              color: Colors.blueAccent,
-                                              size: 18)
-                                          : null,
-                                      dense: true,
-                                      visualDensity: VisualDensity.compact,
-                                      onTap: () {
-                                        if (!isSelected) {
-                                          _changeFormat(
-                                              w, h, activeFpsPreference);
-                                        }
-                                      },
-                                      selected: isSelected,
-                                      hoverColor:
-                                          Colors.white.withOpacity(0.03),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
 
                   // Seletor de FPS
                   Text(
@@ -271,7 +218,7 @@ class _ResolutionSelectorOverlayState
                       letterSpacing: 0.5,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
 
                   Row(
                     children: [
@@ -292,6 +239,24 @@ class _ResolutionSelectorOverlayState
                     ],
                   ),
                 ],
+                const SizedBox(height: 14),
+                // Footer Actions
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: widget.onClose,
+                      child: Text(s.doneLabel,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12)),
+                    )
+                  ],
+                ),
               ],
             ),
           ),
@@ -299,6 +264,86 @@ class _ResolutionSelectorOverlayState
       ),
     );
   }
+
+  Widget _buildResolutionDropdown({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required List<Size> items,
+    required String? selectedValue,
+    required void Function(String?) onChanged,
+    required String noItemsText,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 6),
+        if (items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: Text(
+              noItemsText,
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          )
+        else
+          Container(
+            height: 38,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white.withOpacity(0.12)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                dropdownColor: const Color(0xFF1E1E1E),
+                icon: Icon(Icons.arrow_drop_down, color: color),
+                value: selectedValue,
+                onChanged: onChanged,
+                items: items.map((size) {
+                  final w = size.width.toInt();
+                  final h = size.height.toInt();
+                  final val = '${w}x$h';
+                  final isSelected = val == selectedValue;
+                  return DropdownMenuItem<String>(
+                    value: val,
+                    child: Row(
+                      children: [
+                        Icon(icon, color: isSelected ? color : Colors.grey, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '$w x $h',
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : Colors.grey[300],
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
 
   Widget _buildFpsButton(String label, int value, int activeValue,
       int width, int height, AppStrings s) {

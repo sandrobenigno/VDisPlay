@@ -15,11 +15,17 @@ typedef EnumVideoDevicesDart = int Function();
 typedef EnumAudioDevicesC = Int32 Function();
 typedef EnumAudioDevicesDart = int Function();
 
+typedef EnumAudioOutputDevicesC = Int32 Function();
+typedef EnumAudioOutputDevicesDart = int Function();
+
 typedef GetDeviceStringC = Pointer<Utf8> Function(Int32 index);
 typedef GetDeviceStringDart = Pointer<Utf8> Function(int index);
 
 typedef StartAudioCaptureC = Int32 Function(Pointer<Utf8> deviceId, Int32 enableLoopback);
 typedef StartAudioCaptureDart = int Function(Pointer<Utf8> deviceId, int enableLoopback);
+
+typedef SetAudioOutputDeviceC = Void Function(Pointer<Utf8> deviceId);
+typedef SetAudioOutputDeviceDart = void Function(Pointer<Utf8> deviceId);
 
 typedef StopAudioCaptureC = Void Function();
 typedef StopAudioCaptureDart = void Function();
@@ -74,6 +80,7 @@ class NativeBindings {
   static late final ShutdownDevicesBackendDart shutdownDevicesBackend;
   static late final EnumVideoDevicesDart enumVideoDevices;
   static late final EnumAudioDevicesDart enumAudioDevices;
+  static late final EnumAudioOutputDevicesDart enumAudioOutputDevices;
   static late final GetVideoDimensionDart getVideoWidth;
   static late final GetVideoDimensionDart getVideoHeight;
   
@@ -81,6 +88,10 @@ class NativeBindings {
   static late final GetDeviceStringDart _getVideoDeviceId;
   static late final GetDeviceStringDart _getAudioDeviceName;
   static late final GetDeviceStringDart _getAudioDeviceId;
+  
+  static late final GetDeviceStringDart _getAudioOutputDeviceName;
+  static late final GetDeviceStringDart _getAudioOutputDeviceId;
+  static late final SetAudioOutputDeviceDart _setAudioOutputDevice;
   
   static late final StartAudioCaptureDart startAudioCapture;
   static late final StopAudioCaptureDart stopAudioCapture;
@@ -128,6 +139,10 @@ class NativeBindings {
           .lookup<NativeFunction<EnumAudioDevicesC>>('enum_audio_devices')
           .asFunction();
 
+      enumAudioOutputDevices = _lib
+          .lookup<NativeFunction<EnumAudioOutputDevicesC>>('enum_audio_output_devices')
+          .asFunction();
+
       getVideoWidth = _lib
           .lookup<NativeFunction<GetVideoDimensionC>>('get_video_width')
           .asFunction();
@@ -150,6 +165,18 @@ class NativeBindings {
           
       _getAudioDeviceId = _lib
           .lookup<NativeFunction<GetDeviceStringC>>('get_audio_device_id')
+          .asFunction();
+
+      _getAudioOutputDeviceName = _lib
+          .lookup<NativeFunction<GetDeviceStringC>>('get_audio_output_device_name')
+          .asFunction();
+          
+      _getAudioOutputDeviceId = _lib
+          .lookup<NativeFunction<GetDeviceStringC>>('get_audio_output_device_id')
+          .asFunction();
+          
+      _setAudioOutputDevice = _lib
+          .lookup<NativeFunction<SetAudioOutputDeviceC>>('set_audio_output_device')
           .asFunction();
           
       startAudioCapture = _lib
@@ -247,5 +274,28 @@ class NativeBindings {
     if (!_initialized) return '';
     final ptr = _getAudioDeviceId(index);
     return ptr.toDartString();
+  }
+
+  static String getAudioOutputDeviceName(int index) {
+    if (!_initialized) return '';
+    final ptr = _getAudioOutputDeviceName(index);
+    return ptr.toDartString();
+  }
+
+  static String getAudioOutputDeviceId(int index) {
+    if (!_initialized) return '';
+    final ptr = _getAudioOutputDeviceId(index);
+    return ptr.toDartString();
+  }
+
+  static void setAudioOutputDevice(String deviceId) {
+    if (!_initialized) return;
+    if (deviceId.isEmpty) {
+      _setAudioOutputDevice(Pointer<Utf8>.fromAddress(0));
+    } else {
+      final ptr = deviceId.toNativeUtf8();
+      _setAudioOutputDevice(ptr);
+      calloc.free(ptr);
+    }
   }
 }

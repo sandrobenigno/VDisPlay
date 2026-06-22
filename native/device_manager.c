@@ -24,6 +24,9 @@ static int g_video_device_count = 0;
 static DeviceInfo g_audio_devices[MAX_DEVICES];
 static int g_audio_device_count = 0;
 
+static DeviceInfo g_audio_output_devices[MAX_DEVICES];
+static int g_audio_output_device_count = 0;
+
 static int g_com_initialized = 0;
 static int g_mf_initialized = 0;
 static int g_backends_initialized = 0;
@@ -202,6 +205,72 @@ EXPORT int enum_audio_devices() {
     return g_audio_device_count;
 }
 
+EXPORT int enum_audio_output_devices() {
+    g_audio_output_device_count = 0;
+    if (!g_com_initialized) return 0;
+
+    IMMDeviceEnumerator* pEnumerator = NULL;
+    HRESULT hr = CoCreateInstance(&COMMON_CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, &COMMON_IID_IMMDeviceEnumerator, (void**)&pEnumerator);
+    if (FAILED(hr)) return 0;
+
+    IMMDeviceCollection* pCollection = NULL;
+    hr = pEnumerator->lpVtbl->EnumAudioEndpoints(pEnumerator, eRender, DEVICE_STATE_ACTIVE, &pCollection);
+    if (FAILED(hr)) {
+        pEnumerator->lpVtbl->Release(pEnumerator);
+        return 0;
+    }
+
+    UINT32 count = 0;
+    hr = pCollection->lpVtbl->GetCount(pCollection, &count);
+    if (FAILED(hr)) {
+        pCollection->lpVtbl->Release(pCollection);
+        pEnumerator->lpVtbl->Release(pEnumerator);
+        return 0;
+    }
+
+    int loaded_count = 0;
+    for (UINT32 i = 0; i < count && loaded_count < MAX_DEVICES; i++) {
+        IMMDevice* pDevice = NULL;
+        hr = pCollection->lpVtbl->Item(pCollection, i, &pDevice);
+        if (FAILED(hr) || !pDevice) continue;
+
+        LPWSTR pwszID = NULL;
+        hr = pDevice->lpVtbl->GetId(pDevice, &pwszID);
+        if (SUCCEEDED(hr) && pwszID) {
+            wchar_to_utf8(pwszID, g_audio_output_devices[loaded_count].id, sizeof(g_audio_output_devices[loaded_count].id));
+            CoTaskMemFree(pwszID);
+        } else {
+            snprintf(g_audio_output_devices[loaded_count].id, sizeof(g_audio_output_devices[loaded_count].id), "audiorender_%d", loaded_count);
+        }
+
+        IPropertyStore* pProps = NULL;
+        hr = pDevice->lpVtbl->OpenPropertyStore(pDevice, STGM_READ, &pProps);
+        if (SUCCEEDED(hr)) {
+            PROPVARIANT varName;
+            PropVariantInit(&varName);
+            hr = pProps->lpVtbl->GetValue(pProps, &PKEY_Device_FriendlyName, &varName);
+            if (SUCCEEDED(hr) && varName.pwszVal) {
+                wchar_to_utf8(varName.pwszVal, g_audio_output_devices[loaded_count].name, sizeof(g_audio_output_devices[loaded_count].name));
+                PropVariantClear(&varName);
+            } else {
+                snprintf(g_audio_output_devices[loaded_count].name, sizeof(g_audio_output_devices[loaded_count].name), "Saida de Audio %d", loaded_count + 1);
+            }
+            pProps->lpVtbl->Release(pProps);
+        } else {
+            snprintf(g_audio_output_devices[loaded_count].name, sizeof(g_audio_output_devices[loaded_count].name), "Saida de Audio %d", loaded_count + 1);
+        }
+
+        pDevice->lpVtbl->Release(pDevice);
+        loaded_count++;
+    }
+
+    pCollection->lpVtbl->Release(pCollection);
+    pEnumerator->lpVtbl->Release(pEnumerator);
+
+    g_audio_output_device_count = loaded_count;
+    return g_audio_output_device_count;
+}
+
 EXPORT const char* get_video_device_name(int index) {
     if (index < 0 || index >= g_video_device_count) return "";
     return g_video_devices[index].name;
@@ -220,4 +289,14 @@ EXPORT const char* get_audio_device_name(int index) {
 EXPORT const char* get_audio_device_id(int index) {
     if (index < 0 || index >= g_audio_device_count) return "";
     return g_audio_devices[index].id;
+}
+
+EXPORT const char* get_audio_output_device_name(int index) {
+    if (index < 0 || index >= g_audio_output_device_count) return "";
+    return g_audio_output_devices[index].name;
+}
+
+EXPORT const char* get_audio_output_device_id(int index) {
+    if (index < 0 || index >= g_audio_output_device_count) return "";
+    return g_audio_output_devices[index].id;
 }

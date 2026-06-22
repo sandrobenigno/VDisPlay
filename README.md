@@ -38,7 +38,7 @@ Its focus is speed, simplicity, and minimal system overhead.
 
 * Sub-100ms end-to-end latency
 * Minimal fullscreen preview interface
-* Real-time audio monitoring (completely decoupled from video source for maximum stability)
+* Real-time audio monitoring with selectable audio output devices (completely decoupled from video source for maximum stability)
 * Zero-latency audio mute/unmute (F12) without pitch distortion or connection drops
 * Dynamic resolution/FPS switching
 * Native GPU-accelerated rendering
@@ -87,7 +87,7 @@ The native kernel handles all critical I/O:
 
 #### 🔊 Audio — WASAPI
 
-* Event-driven low-latency shared-mode monitoring
+* Event-driven low-latency shared-mode monitoring with manual selection of reproduction/rendering audio output device (automatic fallback to Windows default device on disconnection)
 * RAW mode support (bypasses Windows DSP)
 * Branchless VU metering via function pointer dispatch
 * High-fidelity Float-precision Cubic Hermite resampling

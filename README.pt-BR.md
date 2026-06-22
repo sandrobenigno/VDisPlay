@@ -38,7 +38,7 @@ Seu foco é velocidade, simplicidade e consumo mínimo de recursos do sistema.
 
 * **Latência ponta a ponta abaixo de 100ms**
 * **Interface de visualização em tela cheia minimalista**
-* **Monitoramento de áudio em tempo real** (completamente desacoplado da fonte de vídeo para máxima estabilidade)
+* **Monitoramento de áudio em tempo real com seleção de dispositivo de saída** (completamente desacoplado da fonte de vídeo para máxima estabilidade)
 * **Silenciamento de áudio (F12) com latência zero**, sem alteração no pitch ou queda de conexão
 * **Troca dinâmica de resolução/FPS**
 * **Renderização nativa acelerada por GPU**
@@ -87,7 +87,7 @@ O kernel nativo lida com todas as E/S críticas:
 
 #### 🔊 Áudio — WASAPI
 
-* Monitoramento orientado a eventos de baixa latência em modo compartilhado
+* Monitoramento orientado a eventos de baixa latência em modo compartilhado com escolha manual do dispositivo de reprodução/saída (fallback automático para o padrão do Windows caso o escolhido seja desconectado)
 * Suporte ao modo RAW (ignora o DSP do Windows)
 * Medição de VU sem ramificações (*branchless*) via despacho de ponteiro de função
 * Reamostragem Cúbica Hermite de alta fidelidade com precisão de ponto flutuante (*float*)

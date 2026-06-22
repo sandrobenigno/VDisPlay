@@ -38,7 +38,8 @@ Seu foco é velocidade, simplicidade e consumo mínimo de recursos do sistema.
 
 * **Latência ponta a ponta abaixo de 100ms**
 * **Interface de visualização em tela cheia minimalista**
-* **Monitoramento de áudio em tempo real**
+* **Monitoramento de áudio em tempo real** (completamente desacoplado da fonte de vídeo para máxima estabilidade)
+* **Silenciamento de áudio (F12) com latência zero**, sem alteração no pitch ou queda de conexão
 * **Troca dinâmica de resolução/FPS**
 * **Renderização nativa acelerada por GPU**
 * **Modo "Sempre no topo" (Always-on-top)**
@@ -90,7 +91,8 @@ O kernel nativo lida com todas as E/S críticas:
 * Suporte ao modo RAW (ignora o DSP do Windows)
 * Medição de VU sem ramificações (*branchless*) via despacho de ponteiro de função
 * Reamostragem Cúbica Hermite de alta fidelidade com precisão de ponto flutuante (*float*)
-* Compensação dinâmica de drift (Controlador P) com pré-buffering para evitar saltos e perda de sincronia
+* Compensação dinâmica de drift (Controlador P) que soma a latência local e o *padding* do WASAPI para micro-ajustes precisos no clock do resampler (evita quedas abruptas de pitch)
+* Renderizador loopback contínuo executando em segundo plano mesmo quando mutado (envia silêncio) para preservar o sincronismo temporal
 
 
 #### 🔧 Correção Estéreo MS2109

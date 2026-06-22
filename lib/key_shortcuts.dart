@@ -172,26 +172,13 @@ class _GlobalKeyboardShortcutHandlerState
 
         videoManager.startPreview(id, name).then((_) {
           widget.showToast(s.toastChannel(index + 1, name));
-          _autoMatchAudio(name);
         });
       }
       return;
     }
   }
 
-  /// Delegates to [AudioManager.tryAutoMatch] — single implementation, no duplication.
-  void _autoMatchAudio(String cameraName) {
-    final s = LocaleNotifier.instance.s;
-    AudioManager().tryAutoMatch(cameraName).then((result) {
-      if (result.audioName != null) {
-        widget.showToast(
-          result.isMono
-              ? s.toastAudioMonoPairedMsg(result.audioName!)
-              : s.toastAudioPaired(result.audioName!),
-        );
-      }
-    });
-  }
+
 
   @override
   Widget build(BuildContext context) {

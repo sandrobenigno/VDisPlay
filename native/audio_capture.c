@@ -267,14 +267,25 @@ static DWORD WINAPI audio_thread_proc(LPVOID lpParam) {
                 LeaveCriticalSection(&g_audio_cs);
 
                  // Executa resampling Hermite para o Output Ring Buffer
-                 uint64_t buffered_frames = g_output_frames_written - g_output_frames_read;
+                 uint64_t local_buffered = g_output_frames_written - g_output_frames_read;
+                 UINT32 padding = 0;
+                 if (local_loopback && g_render_client) {
+                     g_render_client->lpVtbl->GetCurrentPadding(g_render_client, &padding);
+                 }
+                 uint64_t total_buffered = local_buffered + padding;
+
                  double target_buffer = outRate * 0.04; // 40ms target
-                 double error = (double)buffered_frames - target_buffer;
+                 double error = 0.0;
+                 double adjustment = 0.0;
+
+                 // O P-Controller agora roda sempre para manter o sincronismo de buffer
+                 // independentemente do áudio estar mutado (loopback == 0)
+                 error = (double)total_buffered - target_buffer;
                  double max_error = outRate * 0.1;
                  if (error > max_error) error = max_error;
                  if (error < -max_error) error = -max_error;
 
-                 double adjustment = (error / outRate) * 0.3; // 30% por segundo de erro
+                 adjustment = (error / outRate) * 0.3; // 30% por segundo de erro
                  if (adjustment > 0.02) adjustment = 0.02;
                  if (adjustment < -0.02) adjustment = -0.02;
 
@@ -318,7 +329,7 @@ static DWORD WINAPI audio_thread_proc(LPVOID lpParam) {
                  }
 
                 // 2. Loopback para alto-falantes
-                if (local_loopback && g_render_client_out) {
+                if (g_render_client_out) {
                     UINT32 padding = 0;
                     g_render_client->lpVtbl->GetCurrentPadding(g_render_client, &padding);
                     UINT32 bufferFrameCount = 0;
@@ -365,8 +376,10 @@ static DWORD WINAPI audio_thread_proc(LPVOID lpParam) {
 
                                 for (WORD ch = 0; ch < outChannels; ch++) {
                                     float val = 0.0f;
-                                    if (ch == 0) val = left_out;
-                                    else if (ch == 1) val = right_out;
+                                    if (local_loopback) {
+                                        if (ch == 0) val = left_out;
+                                        else if (ch == 1) val = right_out;
+                                    }
                                     writeSample(pRenderData, (int)(j * outChannels + ch), val);
                                 }
                             }
@@ -376,7 +389,7 @@ static DWORD WINAPI audio_thread_proc(LPVOID lpParam) {
                         }
                     }
                 } else {
-                    // Se o loopback estiver desligado, apenas descarta os dados gerados
+                    // Sem render_client_out disponível, descarta os frames para não travar o buffer
                     g_output_frames_read = g_output_frames_written;
                 }
 

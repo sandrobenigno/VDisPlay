@@ -42,21 +42,7 @@ class _DeviceSelectorOverlayState extends State<DeviceSelectorOverlay> {
     setState(() {});
   }
 
-  /// Delegates auto-matching to [AudioManager.tryAutoMatch] — single source of truth.
-  void _autoMatchAudio(String cameraName) {
-    final s = LocaleNotifier.instance.s;
-    AudioManager().tryAutoMatch(cameraName).then((result) {
-      if (!mounted) return;
-      if (result.audioName != null) {
-        widget.showToast(
-          result.isMono
-              ? s.toastAudioMonoPaired(result.audioName!)
-              : s.toastAudioPaired(result.audioName!),
-        );
-      }
-      setState(() {});
-    });
-  }
+
 
   void _confirmExitApp() {
     final s = LocaleNotifier.instance.s;
@@ -194,7 +180,6 @@ class _DeviceSelectorOverlayState extends State<DeviceSelectorOverlay> {
                                       .startPreview(id, name)
                                       .then((_) {
                                     widget.showToast(s.toastVideo(name));
-                                    _autoMatchAudio(name);
                                     setState(() {});
                                   });
                                 },

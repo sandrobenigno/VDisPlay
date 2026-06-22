@@ -36,17 +36,18 @@ Its focus is speed, simplicity, and minimal system overhead.
 
 ## ⚡ Core Features
 
-* **Sub-100ms end-to-end latency**
-* **Minimal fullscreen preview interface**
-* **Real-time audio monitoring**
-* **Dynamic resolution/FPS switching**
-* **Native GPU-accelerated rendering**
-* **Always-on-top mode**
-* **Instant screenshots**
-* **Stereo reconstruction fix for low-cost MS2109 capture cards**
-* **Brightness adjustment in real time**
-* **Safe startup mode for unstable capture devices**
-* **Bilingual interface (English / Português)**
+* Sub-100ms end-to-end latency
+* Minimal fullscreen preview interface
+* Real-time audio monitoring (completely decoupled from video source for maximum stability)
+* Zero-latency audio mute/unmute (F12) without pitch distortion or connection drops
+* Dynamic resolution/FPS switching
+* Native GPU-accelerated rendering
+* Always-on-top mode
+* Instant screenshots
+* Stereo reconstruction fix for low-cost MS2109 capture cards
+* Brightness adjustment in real time
+* Safe startup mode for unstable capture devices
+* Bilingual interface (English / Português)
 
 ---
 
@@ -90,7 +91,8 @@ The native kernel handles all critical I/O:
 * RAW mode support (bypasses Windows DSP)
 * Branchless VU metering via function pointer dispatch
 * High-fidelity Float-precision Cubic Hermite resampling
-* Dynamic drift compensation (P-controller) with pre-buffering to prevent skips and sync drops
+* Dynamic drift compensation (P-controller) incorporating both local ring-buffer latency and Windows WASAPI-padding for highly accurate clock-drift adjustments (fixes pitch drop issues)
+* Continuous loopback render client execution writing silence during mute states to maintain clock synchronization
 
 
 #### 🔧 MS2109 Stereo Fix

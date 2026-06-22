@@ -4,8 +4,6 @@ import 'package:ffi/ffi.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'native_bindings.dart';
 
-/// Result record returned by [AudioManager.tryAutoMatch].
-typedef AutoMatchResult = ({String? audioName, bool isMono});
 
 class AudioManager extends ChangeNotifier {
   static final AudioManager _instance = AudioManager._internal();
@@ -53,6 +51,17 @@ class AudioManager extends ChangeNotifier {
     _isLoopbackEnabled = prefs.getBool('audio_loopback_enabled') ?? false;
     _isDeinterleaveEnabled =
         prefs.getBool('audio_deinterleave_enabled') ?? false;
+
+    final savedAudioDevice = prefs.getString('last_audio_device');
+    if (savedAudioDevice != null && NativeBindings.isReady) {
+      final count = NativeBindings.enumAudioDevices();
+      for (int i = 0; i < count; i++) {
+        if (NativeBindings.getAudioDeviceId(i) == savedAudioDevice) {
+          await startCapture(savedAudioDevice, _isLoopbackEnabled);
+          break;
+        }
+      }
+    }
   }
 
   Future<int> startCapture(String deviceId, bool enableLoopback) async {
@@ -112,58 +121,4 @@ class AudioManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Tries to automatically pair an audio device whose name overlaps with
-  /// [cameraName]. Returns the matched device name and whether it is MONO.
-  /// Returns `(audioName: null, isMono: false)` if no match is found.
-  ///
-  /// Strategy:
-  /// 1. If there was a previously selected audio device, try to reconnect it
-  ///    by ID (exact match — works when returning to a previously paired cam).
-  /// 2. If step 1 fails or there was no previous device, fall back to
-  ///    name-based matching against [cameraName].
-  Future<AutoMatchResult> tryAutoMatch(String cameraName) async {
-    // Bug #2 fix: preserve the current ID before stopping so we can
-    // attempt to reconnect by the same device instead of re-matching by name.
-    final previousId = _selectedDeviceId;
-
-    await stopCapture();
-
-    if (!NativeBindings.isReady) return (audioName: null, isMono: false);
-
-    final count = NativeBindings.enumAudioDevices();
-
-    // --- Step 1: reconnect by previous ID (exact match) ---
-    if (previousId != null) {
-      for (int i = 0; i < count; i++) {
-        if (NativeBindings.getAudioDeviceId(i) == previousId) {
-          final name = NativeBindings.getAudioDeviceName(i);
-          final channels = await startCapture(previousId, _isLoopbackEnabled);
-          return (audioName: name, isMono: channels == 1);
-        }
-      }
-      // Previous device disappeared (unplugged etc.) — fall through to name match.
-    }
-
-    // --- Step 2: name-based auto-match (fallback for first-time pairing) ---
-    final cleanCamName = cameraName.toLowerCase();
-
-    String? matchedId;
-    String? matchedName;
-
-    for (int i = 0; i < count; i++) {
-      final aName = NativeBindings.getAudioDeviceName(i);
-      final aId = NativeBindings.getAudioDeviceId(i);
-      if (aName.toLowerCase().contains(cleanCamName) ||
-          cleanCamName.contains(aName.toLowerCase())) {
-        matchedId = aId;
-        matchedName = aName;
-        break;
-      }
-    }
-
-    if (matchedId == null) return (audioName: null, isMono: false);
-
-    final channels = await startCapture(matchedId, _isLoopbackEnabled);
-    return (audioName: matchedName, isMono: channels == 1);
-  }
 }

@@ -105,7 +105,7 @@ class _HelpOverlayState extends State<HelpOverlay> {
                       child: Column(
                         children: [
                           const Text(
-                            'VDisPlay V1.0.1',
+                            'VDisPlay V1.0.2',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 15,
